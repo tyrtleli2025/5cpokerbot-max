@@ -1,0 +1,27 @@
+general guide for preflop probability
+this is considering we toss a RANDOM card and our opponent does as well
+
+TRIPS:
+probability ranges around .9
+
+PAIRS:
+    Suited:
+        .5 < p < .8
+        p > .7 when all cards are above ten
+    Unsuited:
+        very similar range, just slightly lower
+        can treat them the same pretty much
+
+HIGH CARD:
+    3-Suited:
+        .5 < p < .7
+    2-Suited:
+        .4 < p <.6
+        roughly, like 10% of these fall below .4, and even less go above .6
+    Rainbow:
+        .35 < p < .5
+        goes above .5 if multiple high cards
+
+idk poker stuff but we should be playing most hands?
+obv we play pairs and trips, 3-suited
+the rest we can play if we have relatively high cards or connectors

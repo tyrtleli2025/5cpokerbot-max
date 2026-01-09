@@ -1,0 +1,572 @@
+['2c', '3c', '4c']
+With hand ['2c', '3c', '4c'] won with probability 0.504
+['2c', '3c', '5c']
+With hand ['2c', '3c', '5c'] won with probability 0.529
+['2c', '3c', '6c']
+With hand ['2c', '3c', '6c'] won with probability 0.5015
+['2c', '3c', '7c']
+With hand ['2c', '3c', '7c'] won with probability 0.489
+['2c', '3c', '8c']
+With hand ['2c', '3c', '8c'] won with probability 0.484
+['2c', '3c', '9c']
+With hand ['2c', '3c', '9c'] won with probability 0.493
+['2c', '3c', 'Tc']
+With hand ['2c', '3c', 'Tc'] won with probability 0.5055
+['2c', '3c', 'Jc']
+With hand ['2c', '3c', 'Jc'] won with probability 0.5375
+['2c', '3c', 'Qc']
+With hand ['2c', '3c', 'Qc'] won with probability 0.558
+['2c', '3c', 'Kc']
+With hand ['2c', '3c', 'Kc'] won with probability 0.554
+['2c', '3c', 'Ac']
+With hand ['2c', '3c', 'Ac'] won with probability 0.583
+['2c', '4c', '5c']
+With hand ['2c', '4c', '5c'] won with probability 0.559
+['2c', '4c', '6c']
+With hand ['2c', '4c', '6c'] won with probability 0.491
+['2c', '4c', '7c']
+With hand ['2c', '4c', '7c'] won with probability 0.4605
+['2c', '4c', '8c']
+With hand ['2c', '4c', '8c'] won with probability 0.5145
+['2c', '4c', '9c']
+With hand ['2c', '4c', '9c'] won with probability 0.481
+['2c', '4c', 'Tc']
+With hand ['2c', '4c', 'Tc'] won with probability 0.499
+['2c', '4c', 'Jc']
+With hand ['2c', '4c', 'Jc'] won with probability 0.519
+['2c', '4c', 'Qc']
+With hand ['2c', '4c', 'Qc'] won with probability 0.547
+['2c', '4c', 'Kc']
+With hand ['2c', '4c', 'Kc'] won with probability 0.579
+['2c', '4c', 'Ac']
+With hand ['2c', '4c', 'Ac'] won with probability 0.6215
+['2c', '5c', '6c']
+With hand ['2c', '5c', '6c'] won with probability 0.512
+['2c', '5c', '7c']
+With hand ['2c', '5c', '7c'] won with probability 0.4905
+['2c', '5c', '8c']
+With hand ['2c', '5c', '8c'] won with probability 0.483
+['2c', '5c', '9c']
+With hand ['2c', '5c', '9c'] won with probability 0.48
+['2c', '5c', 'Tc']
+With hand ['2c', '5c', 'Tc'] won with probability 0.515
+['2c', '5c', 'Jc']
+With hand ['2c', '5c', 'Jc'] won with probability 0.5595
+['2c', '5c', 'Qc']
+With hand ['2c', '5c', 'Qc'] won with probability 0.544
+['2c', '5c', 'Kc']
+With hand ['2c', '5c', 'Kc'] won with probability 0.561
+['2c', '5c', 'Ac']
+With hand ['2c', '5c', 'Ac'] won with probability 0.5875
+['2c', '6c', '7c']
+With hand ['2c', '6c', '7c'] won with probability 0.507
+['2c', '6c', '8c']
+With hand ['2c', '6c', '8c'] won with probability 0.519
+['2c', '6c', '9c']
+With hand ['2c', '6c', '9c'] won with probability 0.495
+['2c', '6c', 'Tc']
+With hand ['2c', '6c', 'Tc'] won with probability 0.5195
+['2c', '6c', 'Jc']
+With hand ['2c', '6c', 'Jc'] won with probability 0.5325
+['2c', '6c', 'Qc']
+With hand ['2c', '6c', 'Qc'] won with probability 0.555
+['2c', '6c', 'Kc']
+With hand ['2c', '6c', 'Kc'] won with probability 0.5395
+['2c', '6c', 'Ac']
+With hand ['2c', '6c', 'Ac'] won with probability 0.584
+['2c', '7c', '8c']
+With hand ['2c', '7c', '8c'] won with probability 0.5285
+['2c', '7c', '9c']
+With hand ['2c', '7c', '9c'] won with probability 0.519
+['2c', '7c', 'Tc']
+With hand ['2c', '7c', 'Tc'] won with probability 0.5005
+['2c', '7c', 'Jc']
+With hand ['2c', '7c', 'Jc'] won with probability 0.548
+['2c', '7c', 'Qc']
+With hand ['2c', '7c', 'Qc'] won with probability 0.542
+['2c', '7c', 'Kc']
+With hand ['2c', '7c', 'Kc'] won with probability 0.551
+['2c', '7c', 'Ac']
+With hand ['2c', '7c', 'Ac'] won with probability 0.5465
+['2c', '8c', '9c']
+With hand ['2c', '8c', '9c'] won with probability 0.501
+['2c', '8c', 'Tc']
+With hand ['2c', '8c', 'Tc'] won with probability 0.54
+['2c', '8c', 'Jc']
+With hand ['2c', '8c', 'Jc'] won with probability 0.563
+['2c', '8c', 'Qc']
+With hand ['2c', '8c', 'Qc'] won with probability 0.544
+['2c', '8c', 'Kc']
+With hand ['2c', '8c', 'Kc'] won with probability 0.5525
+['2c', '8c', 'Ac']
+With hand ['2c', '8c', 'Ac'] won with probability 0.593
+['2c', '9c', 'Tc']
+With hand ['2c', '9c', 'Tc'] won with probability 0.5665
+['2c', '9c', 'Jc']
+With hand ['2c', '9c', 'Jc'] won with probability 0.5595
+['2c', '9c', 'Qc']
+With hand ['2c', '9c', 'Qc'] won with probability 0.595
+['2c', '9c', 'Kc']
+With hand ['2c', '9c', 'Kc'] won with probability 0.5535
+['2c', '9c', 'Ac']
+With hand ['2c', '9c', 'Ac'] won with probability 0.5835
+['2c', 'Tc', 'Jc']
+With hand ['2c', 'Tc', 'Jc'] won with probability 0.566
+['2c', 'Tc', 'Qc']
+With hand ['2c', 'Tc', 'Qc'] won with probability 0.6025
+['2c', 'Tc', 'Kc']
+With hand ['2c', 'Tc', 'Kc'] won with probability 0.5715
+['2c', 'Tc', 'Ac']
+With hand ['2c', 'Tc', 'Ac'] won with probability 0.6065
+['2c', 'Jc', 'Qc']
+With hand ['2c', 'Jc', 'Qc'] won with probability 0.582
+['2c', 'Jc', 'Kc']
+With hand ['2c', 'Jc', 'Kc'] won with probability 0.5905
+['2c', 'Jc', 'Ac']
+With hand ['2c', 'Jc', 'Ac'] won with probability 0.6265
+['2c', 'Qc', 'Kc']
+With hand ['2c', 'Qc', 'Kc'] won with probability 0.6115
+['2c', 'Qc', 'Ac']
+With hand ['2c', 'Qc', 'Ac'] won with probability 0.6355
+['2c', 'Kc', 'Ac']
+With hand ['2c', 'Kc', 'Ac'] won with probability 0.642
+['3c', '4c', '5c']
+With hand ['3c', '4c', '5c'] won with probability 0.5555
+['3c', '4c', '6c']
+With hand ['3c', '4c', '6c'] won with probability 0.5395
+['3c', '4c', '7c']
+With hand ['3c', '4c', '7c'] won with probability 0.5185
+['3c', '4c', '8c']
+With hand ['3c', '4c', '8c'] won with probability 0.4795
+['3c', '4c', '9c']
+With hand ['3c', '4c', '9c'] won with probability 0.5245
+['3c', '4c', 'Tc']
+With hand ['3c', '4c', 'Tc'] won with probability 0.523
+['3c', '4c', 'Jc']
+With hand ['3c', '4c', 'Jc'] won with probability 0.552
+['3c', '4c', 'Qc']
+With hand ['3c', '4c', 'Qc'] won with probability 0.5575
+['3c', '4c', 'Kc']
+With hand ['3c', '4c', 'Kc'] won with probability 0.563
+['3c', '4c', 'Ac']
+With hand ['3c', '4c', 'Ac'] won with probability 0.6135
+['3c', '5c', '6c']
+With hand ['3c', '5c', '6c'] won with probability 0.549
+['3c', '5c', '7c']
+With hand ['3c', '5c', '7c'] won with probability 0.5245
+['3c', '5c', '8c']
+With hand ['3c', '5c', '8c'] won with probability 0.5275
+['3c', '5c', '9c']
+With hand ['3c', '5c', '9c'] won with probability 0.5075
+['3c', '5c', 'Tc']
+With hand ['3c', '5c', 'Tc'] won with probability 0.527
+['3c', '5c', 'Jc']
+With hand ['3c', '5c', 'Jc'] won with probability 0.5455
+['3c', '5c', 'Qc']
+With hand ['3c', '5c', 'Qc'] won with probability 0.55
+['3c', '5c', 'Kc']
+With hand ['3c', '5c', 'Kc'] won with probability 0.5635
+['3c', '5c', 'Ac']
+With hand ['3c', '5c', 'Ac'] won with probability 0.615
+['3c', '6c', '7c']
+With hand ['3c', '6c', '7c'] won with probability 0.4995
+['3c', '6c', '8c']
+With hand ['3c', '6c', '8c'] won with probability 0.514
+['3c', '6c', '9c']
+With hand ['3c', '6c', '9c'] won with probability 0.5225
+['3c', '6c', 'Tc']
+With hand ['3c', '6c', 'Tc'] won with probability 0.5305
+['3c', '6c', 'Jc']
+With hand ['3c', '6c', 'Jc'] won with probability 0.5205
+['3c', '6c', 'Qc']
+With hand ['3c', '6c', 'Qc'] won with probability 0.586
+['3c', '6c', 'Kc']
+With hand ['3c', '6c', 'Kc'] won with probability 0.57
+['3c', '6c', 'Ac']
+With hand ['3c', '6c', 'Ac'] won with probability 0.5685
+['3c', '7c', '8c']
+With hand ['3c', '7c', '8c'] won with probability 0.5195
+['3c', '7c', '9c']
+With hand ['3c', '7c', '9c'] won with probability 0.5165
+['3c', '7c', 'Tc']
+With hand ['3c', '7c', 'Tc'] won with probability 0.5135
+['3c', '7c', 'Jc']
+With hand ['3c', '7c', 'Jc'] won with probability 0.517
+['3c', '7c', 'Qc']
+With hand ['3c', '7c', 'Qc'] won with probability 0.5545
+['3c', '7c', 'Kc']
+With hand ['3c', '7c', 'Kc'] won with probability 0.583
+['3c', '7c', 'Ac']
+With hand ['3c', '7c', 'Ac'] won with probability 0.5865
+['3c', '8c', '9c']
+With hand ['3c', '8c', '9c'] won with probability 0.563
+['3c', '8c', 'Tc']
+With hand ['3c', '8c', 'Tc'] won with probability 0.525
+['3c', '8c', 'Jc']
+With hand ['3c', '8c', 'Jc'] won with probability 0.519
+['3c', '8c', 'Qc']
+With hand ['3c', '8c', 'Qc'] won with probability 0.5615
+['3c', '8c', 'Kc']
+With hand ['3c', '8c', 'Kc'] won with probability 0.561
+['3c', '8c', 'Ac']
+With hand ['3c', '8c', 'Ac'] won with probability 0.585
+['3c', '9c', 'Tc']
+With hand ['3c', '9c', 'Tc'] won with probability 0.5695
+['3c', '9c', 'Jc']
+With hand ['3c', '9c', 'Jc'] won with probability 0.57
+['3c', '9c', 'Qc']
+With hand ['3c', '9c', 'Qc'] won with probability 0.577
+['3c', '9c', 'Kc']
+With hand ['3c', '9c', 'Kc'] won with probability 0.557
+['3c', '9c', 'Ac']
+With hand ['3c', '9c', 'Ac'] won with probability 0.606
+['3c', 'Tc', 'Jc']
+With hand ['3c', 'Tc', 'Jc'] won with probability 0.589
+['3c', 'Tc', 'Qc']
+With hand ['3c', 'Tc', 'Qc'] won with probability 0.578
+['3c', 'Tc', 'Kc']
+With hand ['3c', 'Tc', 'Kc'] won with probability 0.57
+['3c', 'Tc', 'Ac']
+With hand ['3c', 'Tc', 'Ac'] won with probability 0.642
+['3c', 'Jc', 'Qc']
+With hand ['3c', 'Jc', 'Qc'] won with probability 0.6235
+['3c', 'Jc', 'Kc']
+With hand ['3c', 'Jc', 'Kc'] won with probability 0.612
+['3c', 'Jc', 'Ac']
+With hand ['3c', 'Jc', 'Ac'] won with probability 0.6115
+['3c', 'Qc', 'Kc']
+With hand ['3c', 'Qc', 'Kc'] won with probability 0.6205
+['3c', 'Qc', 'Ac']
+With hand ['3c', 'Qc', 'Ac'] won with probability 0.6285
+['3c', 'Kc', 'Ac']
+With hand ['3c', 'Kc', 'Ac'] won with probability 0.6365
+['4c', '5c', '6c']
+With hand ['4c', '5c', '6c'] won with probability 0.579
+['4c', '5c', '7c']
+With hand ['4c', '5c', '7c'] won with probability 0.55
+['4c', '5c', '8c']
+With hand ['4c', '5c', '8c'] won with probability 0.5395
+['4c', '5c', '9c']
+With hand ['4c', '5c', '9c'] won with probability 0.537
+['4c', '5c', 'Tc']
+With hand ['4c', '5c', 'Tc'] won with probability 0.534
+['4c', '5c', 'Jc']
+With hand ['4c', '5c', 'Jc'] won with probability 0.5595
+['4c', '5c', 'Qc']
+With hand ['4c', '5c', 'Qc'] won with probability 0.5695
+['4c', '5c', 'Kc']
+With hand ['4c', '5c', 'Kc'] won with probability 0.594
+['4c', '5c', 'Ac']
+With hand ['4c', '5c', 'Ac'] won with probability 0.625
+['4c', '6c', '7c']
+With hand ['4c', '6c', '7c'] won with probability 0.5805
+['4c', '6c', '8c']
+With hand ['4c', '6c', '8c'] won with probability 0.549
+['4c', '6c', '9c']
+With hand ['4c', '6c', '9c'] won with probability 0.5215
+['4c', '6c', 'Tc']
+With hand ['4c', '6c', 'Tc'] won with probability 0.524
+['4c', '6c', 'Jc']
+With hand ['4c', '6c', 'Jc'] won with probability 0.5505
+['4c', '6c', 'Qc']
+With hand ['4c', '6c', 'Qc'] won with probability 0.554
+['4c', '6c', 'Kc']
+With hand ['4c', '6c', 'Kc'] won with probability 0.5945
+['4c', '6c', 'Ac']
+With hand ['4c', '6c', 'Ac'] won with probability 0.59
+['4c', '7c', '8c']
+With hand ['4c', '7c', '8c'] won with probability 0.5555
+['4c', '7c', '9c']
+With hand ['4c', '7c', '9c'] won with probability 0.5155
+['4c', '7c', 'Tc']
+With hand ['4c', '7c', 'Tc'] won with probability 0.5355
+['4c', '7c', 'Jc']
+With hand ['4c', '7c', 'Jc'] won with probability 0.5345
+['4c', '7c', 'Qc']
+With hand ['4c', '7c', 'Qc'] won with probability 0.5685
+['4c', '7c', 'Kc']
+With hand ['4c', '7c', 'Kc'] won with probability 0.6045
+['4c', '7c', 'Ac']
+With hand ['4c', '7c', 'Ac'] won with probability 0.5905
+['4c', '8c', '9c']
+With hand ['4c', '8c', '9c'] won with probability 0.5635
+['4c', '8c', 'Tc']
+With hand ['4c', '8c', 'Tc'] won with probability 0.5465
+['4c', '8c', 'Jc']
+With hand ['4c', '8c', 'Jc'] won with probability 0.5585
+['4c', '8c', 'Qc']
+With hand ['4c', '8c', 'Qc'] won with probability 0.59
+['4c', '8c', 'Kc']
+With hand ['4c', '8c', 'Kc'] won with probability 0.5505
+['4c', '8c', 'Ac']
+With hand ['4c', '8c', 'Ac'] won with probability 0.593
+['4c', '9c', 'Tc']
+With hand ['4c', '9c', 'Tc'] won with probability 0.533
+['4c', '9c', 'Jc']
+With hand ['4c', '9c', 'Jc'] won with probability 0.5595
+['4c', '9c', 'Qc']
+With hand ['4c', '9c', 'Qc'] won with probability 0.5725
+['4c', '9c', 'Kc']
+With hand ['4c', '9c', 'Kc'] won with probability 0.594
+['4c', '9c', 'Ac']
+With hand ['4c', '9c', 'Ac'] won with probability 0.6035
+['4c', 'Tc', 'Jc']
+With hand ['4c', 'Tc', 'Jc'] won with probability 0.589
+['4c', 'Tc', 'Qc']
+With hand ['4c', 'Tc', 'Qc'] won with probability 0.579
+['4c', 'Tc', 'Kc']
+With hand ['4c', 'Tc', 'Kc'] won with probability 0.61
+['4c', 'Tc', 'Ac']
+With hand ['4c', 'Tc', 'Ac'] won with probability 0.642
+['4c', 'Jc', 'Qc']
+With hand ['4c', 'Jc', 'Qc'] won with probability 0.608
+['4c', 'Jc', 'Kc']
+With hand ['4c', 'Jc', 'Kc'] won with probability 0.5965
+['4c', 'Jc', 'Ac']
+With hand ['4c', 'Jc', 'Ac'] won with probability 0.6275
+['4c', 'Qc', 'Kc']
+With hand ['4c', 'Qc', 'Kc'] won with probability 0.6385
+['4c', 'Qc', 'Ac']
+With hand ['4c', 'Qc', 'Ac'] won with probability 0.637
+['4c', 'Kc', 'Ac']
+With hand ['4c', 'Kc', 'Ac'] won with probability 0.7025
+['5c', '6c', '7c']
+With hand ['5c', '6c', '7c'] won with probability 0.575
+['5c', '6c', '8c']
+With hand ['5c', '6c', '8c'] won with probability 0.583
+['5c', '6c', '9c']
+With hand ['5c', '6c', '9c'] won with probability 0.563
+['5c', '6c', 'Tc']
+With hand ['5c', '6c', 'Tc'] won with probability 0.559
+['5c', '6c', 'Jc']
+With hand ['5c', '6c', 'Jc'] won with probability 0.5375
+['5c', '6c', 'Qc']
+With hand ['5c', '6c', 'Qc'] won with probability 0.5825
+['5c', '6c', 'Kc']
+With hand ['5c', '6c', 'Kc'] won with probability 0.5915
+['5c', '6c', 'Ac']
+With hand ['5c', '6c', 'Ac'] won with probability 0.609
+['5c', '7c', '8c']
+With hand ['5c', '7c', '8c'] won with probability 0.5655
+['5c', '7c', '9c']
+With hand ['5c', '7c', '9c'] won with probability 0.566
+['5c', '7c', 'Tc']
+With hand ['5c', '7c', 'Tc'] won with probability 0.5285
+['5c', '7c', 'Jc']
+With hand ['5c', '7c', 'Jc'] won with probability 0.5755
+['5c', '7c', 'Qc']
+With hand ['5c', '7c', 'Qc'] won with probability 0.5745
+['5c', '7c', 'Kc']
+With hand ['5c', '7c', 'Kc'] won with probability 0.5725
+['5c', '7c', 'Ac']
+With hand ['5c', '7c', 'Ac'] won with probability 0.616
+['5c', '8c', '9c']
+With hand ['5c', '8c', '9c'] won with probability 0.568
+['5c', '8c', 'Tc']
+With hand ['5c', '8c', 'Tc'] won with probability 0.5545
+['5c', '8c', 'Jc']
+With hand ['5c', '8c', 'Jc'] won with probability 0.5595
+['5c', '8c', 'Qc']
+With hand ['5c', '8c', 'Qc'] won with probability 0.572
+['5c', '8c', 'Kc']
+With hand ['5c', '8c', 'Kc'] won with probability 0.608
+['5c', '8c', 'Ac']
+With hand ['5c', '8c', 'Ac'] won with probability 0.639
+['5c', '9c', 'Tc']
+With hand ['5c', '9c', 'Tc'] won with probability 0.5445
+['5c', '9c', 'Jc']
+With hand ['5c', '9c', 'Jc'] won with probability 0.5795
+['5c', '9c', 'Qc']
+With hand ['5c', '9c', 'Qc'] won with probability 0.5445
+['5c', '9c', 'Kc']
+With hand ['5c', '9c', 'Kc'] won with probability 0.6095
+['5c', '9c', 'Ac']
+With hand ['5c', '9c', 'Ac'] won with probability 0.6195
+['5c', 'Tc', 'Jc']
+With hand ['5c', 'Tc', 'Jc'] won with probability 0.586
+['5c', 'Tc', 'Qc']
+With hand ['5c', 'Tc', 'Qc'] won with probability 0.5655
+['5c', 'Tc', 'Kc']
+With hand ['5c', 'Tc', 'Kc'] won with probability 0.6025
+['5c', 'Tc', 'Ac']
+With hand ['5c', 'Tc', 'Ac'] won with probability 0.639
+['5c', 'Jc', 'Qc']
+With hand ['5c', 'Jc', 'Qc'] won with probability 0.611
+['5c', 'Jc', 'Kc']
+With hand ['5c', 'Jc', 'Kc'] won with probability 0.605
+['5c', 'Jc', 'Ac']
+With hand ['5c', 'Jc', 'Ac'] won with probability 0.626
+['5c', 'Qc', 'Kc']
+With hand ['5c', 'Qc', 'Kc'] won with probability 0.642
+['5c', 'Qc', 'Ac']
+With hand ['5c', 'Qc', 'Ac'] won with probability 0.628
+['5c', 'Kc', 'Ac']
+With hand ['5c', 'Kc', 'Ac'] won with probability 0.6145
+['6c', '7c', '8c']
+With hand ['6c', '7c', '8c'] won with probability 0.611
+['6c', '7c', '9c']
+With hand ['6c', '7c', '9c'] won with probability 0.59
+['6c', '7c', 'Tc']
+With hand ['6c', '7c', 'Tc'] won with probability 0.5795
+['6c', '7c', 'Jc']
+With hand ['6c', '7c', 'Jc'] won with probability 0.56
+['6c', '7c', 'Qc']
+With hand ['6c', '7c', 'Qc'] won with probability 0.5945
+['6c', '7c', 'Kc']
+With hand ['6c', '7c', 'Kc'] won with probability 0.5825
+['6c', '7c', 'Ac']
+With hand ['6c', '7c', 'Ac'] won with probability 0.621
+['6c', '8c', '9c']
+With hand ['6c', '8c', '9c'] won with probability 0.5805
+['6c', '8c', 'Tc']
+With hand ['6c', '8c', 'Tc'] won with probability 0.586
+['6c', '8c', 'Jc']
+With hand ['6c', '8c', 'Jc'] won with probability 0.5495
+['6c', '8c', 'Qc']
+With hand ['6c', '8c', 'Qc'] won with probability 0.5945
+['6c', '8c', 'Kc']
+With hand ['6c', '8c', 'Kc'] won with probability 0.572
+['6c', '8c', 'Ac']
+With hand ['6c', '8c', 'Ac'] won with probability 0.596
+['6c', '9c', 'Tc']
+With hand ['6c', '9c', 'Tc'] won with probability 0.594
+['6c', '9c', 'Jc']
+With hand ['6c', '9c', 'Jc'] won with probability 0.566
+['6c', '9c', 'Qc']
+With hand ['6c', '9c', 'Qc'] won with probability 0.6075
+['6c', '9c', 'Kc']
+With hand ['6c', '9c', 'Kc'] won with probability 0.6165
+['6c', '9c', 'Ac']
+With hand ['6c', '9c', 'Ac'] won with probability 0.601
+['6c', 'Tc', 'Jc']
+With hand ['6c', 'Tc', 'Jc'] won with probability 0.595
+['6c', 'Tc', 'Qc']
+With hand ['6c', 'Tc', 'Qc'] won with probability 0.59
+['6c', 'Tc', 'Kc']
+With hand ['6c', 'Tc', 'Kc'] won with probability 0.624
+['6c', 'Tc', 'Ac']
+With hand ['6c', 'Tc', 'Ac'] won with probability 0.6315
+['6c', 'Jc', 'Qc']
+With hand ['6c', 'Jc', 'Qc'] won with probability 0.6085
+['6c', 'Jc', 'Kc']
+With hand ['6c', 'Jc', 'Kc'] won with probability 0.618
+['6c', 'Jc', 'Ac']
+With hand ['6c', 'Jc', 'Ac'] won with probability 0.6375
+['6c', 'Qc', 'Kc']
+With hand ['6c', 'Qc', 'Kc'] won with probability 0.6275
+['6c', 'Qc', 'Ac']
+With hand ['6c', 'Qc', 'Ac'] won with probability 0.6255
+['6c', 'Kc', 'Ac']
+With hand ['6c', 'Kc', 'Ac'] won with probability 0.645
+['7c', '8c', '9c']
+With hand ['7c', '8c', '9c'] won with probability 0.6255
+['7c', '8c', 'Tc']
+With hand ['7c', '8c', 'Tc'] won with probability 0.5895
+['7c', '8c', 'Jc']
+With hand ['7c', '8c', 'Jc'] won with probability 0.589
+['7c', '8c', 'Qc']
+With hand ['7c', '8c', 'Qc'] won with probability 0.5765
+['7c', '8c', 'Kc']
+With hand ['7c', '8c', 'Kc'] won with probability 0.6015
+['7c', '8c', 'Ac']
+With hand ['7c', '8c', 'Ac'] won with probability 0.6235
+['7c', '9c', 'Tc']
+With hand ['7c', '9c', 'Tc'] won with probability 0.61
+['7c', '9c', 'Jc']
+With hand ['7c', '9c', 'Jc'] won with probability 0.6135
+['7c', '9c', 'Qc']
+With hand ['7c', '9c', 'Qc'] won with probability 0.6105
+['7c', '9c', 'Kc']
+With hand ['7c', '9c', 'Kc'] won with probability 0.5895
+['7c', '9c', 'Ac']
+With hand ['7c', '9c', 'Ac'] won with probability 0.63
+['7c', 'Tc', 'Jc']
+With hand ['7c', 'Tc', 'Jc'] won with probability 0.6165
+['7c', 'Tc', 'Qc']
+With hand ['7c', 'Tc', 'Qc'] won with probability 0.5845
+['7c', 'Tc', 'Kc']
+With hand ['7c', 'Tc', 'Kc'] won with probability 0.6225
+['7c', 'Tc', 'Ac']
+With hand ['7c', 'Tc', 'Ac'] won with probability 0.637
+['7c', 'Jc', 'Qc']
+With hand ['7c', 'Jc', 'Qc'] won with probability 0.61
+['7c', 'Jc', 'Kc']
+With hand ['7c', 'Jc', 'Kc'] won with probability 0.618
+['7c', 'Jc', 'Ac']
+With hand ['7c', 'Jc', 'Ac'] won with probability 0.635
+['7c', 'Qc', 'Kc']
+With hand ['7c', 'Qc', 'Kc'] won with probability 0.644
+['7c', 'Qc', 'Ac']
+With hand ['7c', 'Qc', 'Ac'] won with probability 0.6455
+['7c', 'Kc', 'Ac']
+With hand ['7c', 'Kc', 'Ac'] won with probability 0.647
+['8c', '9c', 'Tc']
+With hand ['8c', '9c', 'Tc'] won with probability 0.6535
+['8c', '9c', 'Jc']
+With hand ['8c', '9c', 'Jc'] won with probability 0.632
+['8c', '9c', 'Qc']
+With hand ['8c', '9c', 'Qc'] won with probability 0.6085
+['8c', '9c', 'Kc']
+With hand ['8c', '9c', 'Kc'] won with probability 0.582
+['8c', '9c', 'Ac']
+With hand ['8c', '9c', 'Ac'] won with probability 0.674
+['8c', 'Tc', 'Jc']
+With hand ['8c', 'Tc', 'Jc'] won with probability 0.651
+['8c', 'Tc', 'Qc']
+With hand ['8c', 'Tc', 'Qc'] won with probability 0.6135
+['8c', 'Tc', 'Kc']
+With hand ['8c', 'Tc', 'Kc'] won with probability 0.619
+['8c', 'Tc', 'Ac']
+With hand ['8c', 'Tc', 'Ac'] won with probability 0.6285
+['8c', 'Jc', 'Qc']
+With hand ['8c', 'Jc', 'Qc'] won with probability 0.645
+['8c', 'Jc', 'Kc']
+With hand ['8c', 'Jc', 'Kc'] won with probability 0.64
+['8c', 'Jc', 'Ac']
+With hand ['8c', 'Jc', 'Ac'] won with probability 0.663
+['8c', 'Qc', 'Kc']
+With hand ['8c', 'Qc', 'Kc'] won with probability 0.6375
+['8c', 'Qc', 'Ac']
+With hand ['8c', 'Qc', 'Ac'] won with probability 0.6295
+['8c', 'Kc', 'Ac']
+With hand ['8c', 'Kc', 'Ac'] won with probability 0.681
+['9c', 'Tc', 'Jc']
+With hand ['9c', 'Tc', 'Jc'] won with probability 0.6775
+['9c', 'Tc', 'Qc']
+With hand ['9c', 'Tc', 'Qc'] won with probability 0.6365
+['9c', 'Tc', 'Kc']
+With hand ['9c', 'Tc', 'Kc'] won with probability 0.65
+['9c', 'Tc', 'Ac']
+With hand ['9c', 'Tc', 'Ac'] won with probability 0.6555
+['9c', 'Jc', 'Qc']
+With hand ['9c', 'Jc', 'Qc'] won with probability 0.652
+['9c', 'Jc', 'Kc']
+With hand ['9c', 'Jc', 'Kc'] won with probability 0.653
+['9c', 'Jc', 'Ac']
+With hand ['9c', 'Jc', 'Ac'] won with probability 0.6515
+['9c', 'Qc', 'Kc']
+With hand ['9c', 'Qc', 'Kc'] won with probability 0.6445
+['9c', 'Qc', 'Ac']
+With hand ['9c', 'Qc', 'Ac'] won with probability 0.654
+['9c', 'Kc', 'Ac']
+With hand ['9c', 'Kc', 'Ac'] won with probability 0.671
+['Tc', 'Jc', 'Qc']
+With hand ['Tc', 'Jc', 'Qc'] won with probability 0.682
+['Tc', 'Jc', 'Kc']
+With hand ['Tc', 'Jc', 'Kc'] won with probability 0.667
+['Tc', 'Jc', 'Ac']
+With hand ['Tc', 'Jc', 'Ac'] won with probability 0.6885
+['Tc', 'Qc', 'Kc']
+With hand ['Tc', 'Qc', 'Kc'] won with probability 0.6695
+['Tc', 'Qc', 'Ac']
+With hand ['Tc', 'Qc', 'Ac'] won with probability 0.702
+['Tc', 'Kc', 'Ac']
+With hand ['Tc', 'Kc', 'Ac'] won with probability 0.6755
+['Jc', 'Qc', 'Kc']
+With hand ['Jc', 'Qc', 'Kc'] won with probability 0.691
+['Jc', 'Qc', 'Ac']
+With hand ['Jc', 'Qc', 'Ac'] won with probability 0.6795
+['Jc', 'Kc', 'Ac']
+With hand ['Jc', 'Kc', 'Ac'] won with probability 0.693
+['Qc', 'Kc', 'Ac']
+With hand ['Qc', 'Kc', 'Ac'] won with probability 0.7035

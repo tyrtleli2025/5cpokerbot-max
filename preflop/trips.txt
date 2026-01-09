@@ -1,0 +1,13 @@
+With hand ['2c', '2d', '2h'] won with probability 0.882
+With hand ['3c', '3d', '3h'] won with probability 0.88
+With hand ['4c', '4d', '4h'] won with probability 0.874
+With hand ['5c', '5d', '5h'] won with probability 0.8685
+With hand ['6c', '6d', '6h'] won with probability 0.8975
+With hand ['7c', '7d', '7h'] won with probability 0.8855
+With hand ['8c', '8d', '8h'] won with probability 0.885
+With hand ['9c', '9d', '9h'] won with probability 0.887
+With hand ['Tc', 'Td', 'Th'] won with probability 0.8865
+With hand ['Jc', 'Jd', 'Jh'] won with probability 0.887
+With hand ['Qc', 'Qd', 'Qh'] won with probability 0.9225
+With hand ['Kc', 'Kd', 'Kh'] won with probability 0.924
+With hand ['Ac', 'Ad', 'Ah'] won with probability 0.918

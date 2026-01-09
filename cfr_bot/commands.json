@@ -1,0 +1,4 @@
+{
+    "build": [],
+    "run": ["/opt/homebrew/bin/python3", "player.py"]
+}

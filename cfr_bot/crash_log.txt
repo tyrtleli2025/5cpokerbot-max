@@ -1,0 +1,7 @@
+Traceback (most recent call last):
+  File "/Users/tylerli/Documents/GitHub/5cpokerbot-max/cfr_bot/player.py", line 51, in get_action
+    action_idx = random.choices([0, 1, 2], weights=probs)[0]
+                 ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/lib/python3.13/random.py", line 484, in choices
+    raise ValueError('The number of weights does not match the population')
+ValueError: The number of weights does not match the population

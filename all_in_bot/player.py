@@ -1,15 +1,19 @@
 '''
-Simple All-In or Fold Pokerbot
+Simple All-In or Fold Pokerbot with "Lockdown" Safety Mode
+Updated to Call Big Blinds with weak hands.
 '''
 from skeleton.actions import FoldAction, CallAction, CheckAction, RaiseAction, DiscardAction
-from skeleton.states import GameState, TerminalState, RoundState
+from skeleton.states import GameState, TerminalState, RoundState, NUM_ROUNDS, BIG_BLIND
 from skeleton.bot import Bot
 from skeleton.runner import parse_args, run_bot
 
 class Player(Bot):
     '''
-    A bot that goes All-In Pre-flop with pairs, suited cards, trips, or connectors.
-    Otherwise, it folds.
+    A bot that:
+    1. Goes All-In Pre-flop with strong hands.
+    2. Calls the Big Blind (limps) with weak hands, then Check/Folds.
+    3. Uses smart discard logic (denying flushes/keeping connectivity).
+    4. Enters "Lockdown Mode" (Check/Fold) if it has mathematically won.
     '''
 
     def __init__(self):
@@ -28,78 +32,147 @@ class Player(Bot):
         board = round_state.board
 
         # ---------------------------------------------------------
-        # 1. HANDLE DISCARD ACTION
+        # 1. HANDLE DISCARD ACTION (Always required if legal)
         # ---------------------------------------------------------
         if DiscardAction in legal:
-            # Simple Strategy: Discard the lowest rank card
-            # Ranks: 2=0, 3=1, ... A=12
+            # Smart Strategy: Avoid discarding flush connectivity or high cards
             rank_map = {r: i for i, r in enumerate("23456789TJQKA")}
-            my_ranks = [rank_map[c[0]] for c in my_cards]
             
-            # Find index of lowest card
-            min_rank = min(my_ranks)
-            discard_index = my_ranks.index(min_rank)
-            return DiscardAction(discard_index)
+            # Analyze Board Texture
+            board_suits = [c[1] for c in board]
+            
+            # Check if board has flush potential (2 of same suit)
+            flush_suit = None
+            if len(board_suits) == 2 and board_suits[0] == board_suits[1]:
+                flush_suit = board_suits[0]
+            
+            best_discard_index = 0
+            lowest_danger_score = float('inf')
+            
+            for i, card in enumerate(my_cards):
+                card_rank = rank_map[card[0]]
+                card_suit = card[1]
+                
+                # Base Danger Score = Rank (0-12)
+                # Higher rank = Higher danger to leave on board for opponent
+                danger_score = card_rank
+                
+                # Flush Danger Penalty
+                if flush_suit and card_suit == flush_suit:
+                    danger_score += 100
+                
+                if danger_score < lowest_danger_score:
+                    lowest_danger_score = danger_score
+                    best_discard_index = i
+            
+            return DiscardAction(best_discard_index)
 
         # ---------------------------------------------------------
-        # 2. PRE-FLOP STRATEGY (The "All-In" Logic)
+        # 2. LOCKDOWN CHECK (Safety Mode)
+        # ---------------------------------------------------------
+        # Calculate rounds remaining (including current one)
+        rounds_remaining = NUM_ROUNDS - game_state.round_num + 1
+        
+        # Average cost to fold every hand is 1.5 chips/round.
+        # If we have more chips than we can possibly lose, stop betting.
+        # We add a small buffer (+2) to handle the variance of ending on a Big Blind.
+        secure_win_threshold = (rounds_remaining * 1.5) + 2
+        
+        if game_state.bankroll > secure_win_threshold:
+            # We have won. Do not risk any chips.
+            if CheckAction in legal:
+                return CheckAction()
+            return FoldAction()
+
+        # ---------------------------------------------------------
+        # 3. PRE-FLOP STRATEGY
         # ---------------------------------------------------------
         if street == 0:
             if self.is_good_preflop(my_cards):
-                # GO ALL IN
+                # GOOD HAND -> GO ALL IN
                 if RaiseAction in legal:
                     min_raise, max_raise = round_state.raise_bounds()
                     return RaiseAction(max_raise)
-                # If we can't raise (e.g. facing a shove), Call
                 if CallAction in legal:
                     return CallAction()
                 if CheckAction in legal:
                     return CheckAction()
             else:
-                # BAD HAND -> FOLD
-                # (Unless we can check for free)
+                # BAD HAND -> CHECK OR CALL BLIND
+                
+                # 1. If we can Check (we are BB and no raise), just Check.
                 if CheckAction in legal:
                     return CheckAction()
+                
+                # 2. If we can Call, check if it's cheap (just the Big Blind).
+                # If opp_pip > BIG_BLIND, they raised, so we should Fold.
+                # If opp_pip <= BIG_BLIND, it's just the blind, so we Call.
+                opp_pip = round_state.pips[1-active]
+                
+                if CallAction in legal and opp_pip <= BIG_BLIND:
+                    return CallAction()
+                
+                # 3. Otherwise (facing a raise), Fold.
                 return FoldAction()
 
         # ---------------------------------------------------------
-        # 3. POST-FLOP / WAITING TURNS
+        # 4. POST-FLOP STRATEGY
         # ---------------------------------------------------------
-        # If we made it here, we either went all-in or checked through.
-        # Just check/call to try and see the showdown.
+        # If we didn't fold pre-flop, we are likely All-In or checked through.
         
+        # Always Check if possible
         if CheckAction in legal:
             return CheckAction()
-        if CallAction in legal:
-            return CallAction()
+        
+        # Fold to any aggression (since we only have a bad hand here)
         return FoldAction()
 
     def is_good_preflop(self, cards):
         '''
-        Returns True if hand is Pair, Suited, 3-of-a-kind, or Connectors.
+        Returns True if hand is:
+        - Trips
+        - Pair (55+)
+        - 3 of the same suit AND sum of card values >= 25
         '''
         rank_map = {r: i for i, r in enumerate("23456789TJQKA")}
         ranks = [rank_map[c[0]] for c in cards]
         suits = [c[1] for c in cards]
         
-        # 1. Pairs / 3-of-a-kind
-        # If unique ranks < 3, we have duplicates (Pair or Trips)
-        if len(set(ranks)) < 3:
-            return True
-
-        # 2. Same Suit (Flush potential)
-        if len(set(suits)) == 1:
-            return True
-
-        # 3. Connectors (Straight potential)
-        # Sort ranks and check if they are sequential (e.g. 5, 6, 7)
-        sorted_ranks = sorted(ranks)
-        if (sorted_ranks[1] == sorted_ranks[0] + 1) and (sorted_ranks[2] == sorted_ranks[1] + 1):
-            return True
+        # Count rank frequencies
+        rank_counts = {}
+        for r in ranks:
+            rank_counts[r] = rank_counts.get(r, 0) + 1
+            
+        is_pair = False
+        is_trips = False
+        pair_rank = -1
         
-        # Special Case: Wheel Straight (A, 2, 3) -> Ranks [12, 0, 1]
-        if set(sorted_ranks) == {0, 1, 12}:
+        for r, count in rank_counts.items():
+            if count == 2:
+                is_pair = True
+                pair_rank = r
+            elif count == 3:
+                is_trips = True
+        
+        # 1. Pairs / Trips Logic
+        if is_trips:
             return True
+            
+        if is_pair:
+            # If pair is 2, 3, or 4 (indices 0, 1, 2), fold
+            if pair_rank <= 2:
+                return False
+            # Otherwise (55+), it's good
+            return True
+
+        # 2. Suited Logic (Flush potential)
+        if len(set(suits)) == 1:
+            # Sum of face values (2=2 ... A=14)
+            total_val = sum(r + 2 for r in ranks)
+            if total_val >= 25:
+                return True
+            else:
+                return False
 
         return False
 

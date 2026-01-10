@@ -1,548 +1,457 @@
-'''
-Online Regret-Matching+ with Monte Carlo rollouts (discard-aware).
+"""
+player.py — Titan v3.1 (Fixed + Stronger)
 
-This is "CFR-ish" rather than true MCCFR over a full game tree, because the engine
-doesn't give us an easy way to compute exact counterfactual values at every node.
-Instead, we estimate action values using:
-- current pot / cost
-- showdown equity from Monte Carlo rollouts that simulate the discard mechanic
-
-Then we update regrets toward higher-EV actions (Regret Matching+).
-We also accumulate average strategy (strategy_sum) for stability.
-
-Action abstraction:
-0 = Fold (or Check if free)
-1 = Check/Call
-2 = Pot raise
-3 = All-in
-'''
-from __future__ import annotations
+Fixes:
+- NEVER misformats discard: if DiscardAction is legal, we ALWAYS return DiscardAction(...) first.
+- Robust legal-action checks (works whether legal_actions returns classes or instances).
+- Postflop raise sizing fixed to be consistently "raise-to".
+- Equity sim improved: opponent keeps best 2 *board-aware* (by evaluating keep2 + board).
+- Equity caching actually used.
+- Hand evaluator upgraded (accurate 7-card best-5 via 21 combos) — slower than the old hack,
+  but much less wrong. Iterations are adjusted + cached to keep runtime reasonable.
+"""
 
 import random
-import itertools
-from collections import defaultdict
-from typing import List, Tuple, Dict, Optional
+from collections import defaultdict, Counter
+from itertools import combinations
 
 from skeleton.actions import FoldAction, CallAction, CheckAction, RaiseAction, DiscardAction
-from skeleton.states import GameState, TerminalState, RoundState, STARTING_STACK, BIG_BLIND
+from skeleton.states import GameState, TerminalState, RoundState, NUM_ROUNDS, STARTING_STACK
 from skeleton.bot import Bot
 from skeleton.runner import parse_args, run_bot
 
-# ----------------------------
-# Constants / Card utilities
-# ----------------------------
-RANKS = "23456789TJQKA"
-RANK_TO_INT = {r: i for i, r in enumerate(RANKS, start=2)}
-SUITS = "cdhs"
-
-ACT_FOLD = 0
-ACT_CHECK_CALL = 1
-ACT_RAISE_POT = 2
-ACT_ALL_IN = 3
-NUM_ACTS = 4
-
-def parse_card(card: str) -> Tuple[int, str]:
-    return (RANK_TO_INT[card[0]], card[1])
-
-def clamp(x: int, lo: int, hi: int) -> int:
-    return max(lo, min(hi, x))
-
-def is_straight(ranks: List[int]) -> Tuple[bool, int]:
-    uniq = sorted(set(ranks))
-    if len(uniq) != 5:
-        return (False, 0)
-    # wheel A2345
-    if uniq == [2, 3, 4, 5, 14]:
-        return (True, 5)
-    if max(uniq) - min(uniq) == 4:
-        return (True, max(uniq))
-    return (False, 0)
-
-def eval_5(cards5: List[str]) -> Tuple[int, List[int]]:
-    ranks = [parse_card(c)[0] for c in cards5]
-    suits = [parse_card(c)[1] for c in cards5]
-
-    counts: Dict[int, int] = {}
-    for r in ranks:
-        counts[r] = counts.get(r, 0) + 1
-    by_count = sorted(counts.items(), key=lambda x: (x[1], x[0]), reverse=True)
-
-    flush = len(set(suits)) == 1
-    straight, straight_high = is_straight(ranks)
-
-    if flush and straight:
-        return (8, [straight_high])
-    if by_count[0][1] == 4:
-        quad = by_count[0][0]
-        kicker = max(r for r in ranks if r != quad)
-        return (7, [quad, kicker])
-    if by_count[0][1] == 3 and by_count[1][1] == 2:
-        return (6, [by_count[0][0], by_count[1][0]])
-    if flush:
-        return (5, sorted(ranks, reverse=True))
-    if straight:
-        return (4, [straight_high])
-    if by_count[0][1] == 3:
-        trips = by_count[0][0]
-        kickers = sorted([r for r in ranks if r != trips], reverse=True)
-        return (3, [trips] + kickers)
-    if by_count[0][1] == 2 and by_count[1][1] == 2:
-        hp = max(by_count[0][0], by_count[1][0])
-        lp = min(by_count[0][0], by_count[1][0])
-        kicker = max(r for r in ranks if r != hp and r != lp)
-        return (2, [hp, lp, kicker])
-    if by_count[0][1] == 2:
-        pair = by_count[0][0]
-        kickers = sorted([r for r in ranks if r != pair], reverse=True)
-        return (1, [pair] + kickers)
-    return (0, sorted(ranks, reverse=True))
-
-def best_hand(pool: List[str]) -> Tuple[int, List[int]]:
-    best = (-1, [])
-    for combo in itertools.combinations(pool, 5):
-        val = eval_5(list(combo))
-        if val > best:
-            best = val
-    return best
-
-def full_deck() -> List[str]:
-    return [r + s for r in RANKS for s in SUITS]
+# Try to import pkrbot for C++ speed. If not available, use Python evaluator.
+try:
+    import pkrbot  # noqa: F401
+    PKRBOT_AVAILABLE = True
+except ImportError:
+    PKRBOT_AVAILABLE = False
 
 
-# ----------------------------
-# Discard heuristic
-# ----------------------------
-def keep2_score(ca: str, cb: str, board: List[str]) -> int:
-    ra, sa = parse_card(ca)
-    rb, sb = parse_card(cb)
-    rhi, rlo = max(ra, rb), min(ra, rb)
-    sc = 0
-
-    # pair
-    if ra == rb:
-        sc += 12 + (2 if ra >= 11 else 0)
-
-    # suited
-    if sa == sb:
-        sc += 4
-
-    # connectivity
-    gap = rhi - rlo
-    if gap == 1:
-        sc += 4
-    elif gap == 2:
-        sc += 3
-    elif gap == 3:
-        sc += 1
-
-    # high cards
-    sc += (2 if rhi >= 13 else 0)
-    sc += (1 if rlo >= 11 else 0)
-
-    # tiny board awareness (matching ranks)
-    if board:
-        br = {parse_card(b)[0] for b in board}
-        if ra in br:
-            sc += 2
-        if rb in br:
-            sc += 2
-
-    return sc
-
-def choose_discard_index(cards3: List[str], board: List[str]) -> int:
-    # discard the card that leaves best 2-card core
-    best_idx = 0
-    best_sc = -10**9
-    for i in range(3):
-        keep = [c for j, c in enumerate(cards3) if j != i]
-        sc = keep2_score(keep[0], keep[1], board)
-        if sc > best_sc:
-            best_sc = sc
-            best_idx = i
-    return best_idx
+RANK_TO_INT = {'2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9,
+               'T': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14}
 
 
-# ----------------------------
-# State abstraction
-# ----------------------------
-def strength_bucket_from_equity(eq: float) -> int:
-    # 5 buckets similar to your idea but grounded
-    if eq < 0.30:
-        return 0
-    if eq < 0.42:
-        return 1
-    if eq < 0.52:
-        return 2
-    if eq < 0.65:
-        return 3
-    return 4
-
-def street_bucket(street: int) -> int:
-    # 0 preflop, 1 discard streets, 2 early post-discard, 3 late (turn/river)
-    if street == 0:
-        return 0
-    if street in (2, 3):
-        return 1
-    if street == 4:
-        return 2
-    return 3
-
-def cost_bucket(cost: int) -> int:
-    if cost <= 0:
-        return 0
-    if cost <= 2:
-        return 1
-    if cost <= 10:
-        return 2
-    if cost <= 50:
-        return 3
-    return 4
-
-
-# ----------------------------
-# Rollout equity (discard-aware)
-# ----------------------------
-def rollout_equity(
-    my_hole: List[str],
-    board: List[str],
-    street: int,
-    iters: int,
-    rng: random.Random,
-) -> float:
-    """
-    Returns P(win) + 0.5*P(tie) versus a random opponent, using discard heuristics.
-
-    Important: We DO model the toss mechanic:
-    - Preflop: both have 3 hole. We simulate flop(2), then our discard + opp discard,
-      then turn+river to reach 6 board.
-    - During discard streets: simulate the remaining discard(s) with heuristics.
-    - After discard: simulate remaining board cards to reach 6.
-    """
-    known = set(my_hole + board)
-    deck = [c for c in full_deck() if c not in known]
-    wins = 0.0
-
-    # figure how many hole cards we currently have (engine gives 3 preflop and during discard, 2 later)
-    # We'll trust my_hole length from round_state.
-    for _ in range(iters):
-        d = deck[:]  # copy
-        rng.shuffle(d)
-        idx = 0
-
-        # sample opponent private cards (same count as ours *at this point*)
-        opp_hole = [d[idx], d[idx + 1]]
-        idx += 2
-        if len(my_hole) == 3:
-            opp_hole.append(d[idx])
-            idx += 1
-
-        sim_board = board[:]
-        sim_my = my_hole[:]
-        sim_opp = opp_hole[:]
-
-        # If preflop, need to deal flop(2) before discards
-        if street == 0:
-            # flop is 2 cards
-            sim_board.extend([d[idx], d[idx + 1]])
-            idx += 2
-
-        # If we are before both discards are done, perform discards to get to 4-card board
-        # Streets: 2 = first discard pending, 3 = second discard pending (framework detail)
-        # We'll just ensure we end with 2 hole each and board length 4 before dealing turn/river.
-        if len(sim_my) == 3 and len(sim_board) == 2:
-            # no discards yet (we're right after flop in preflop simulation path)
-            # both discard once
-            my_di = choose_discard_index(sim_my, sim_board)
-            sim_board.append(sim_my.pop(my_di))
-            opp_di = choose_discard_index(sim_opp, sim_board)
-            sim_board.append(sim_opp.pop(opp_di))
-
-        elif len(sim_my) == 3 and len(sim_board) == 3:
-            # one discard already happened (board has 3)
-            # whoever hasn't discarded in simulation: both should end with 2
-            if len(sim_my) == 3:
-                my_di = choose_discard_index(sim_my, sim_board)
-                sim_board.append(sim_my.pop(my_di))
-            if len(sim_opp) == 3:
-                opp_di = choose_discard_index(sim_opp, sim_board)
-                sim_board.append(sim_opp.pop(opp_di))
-
-        elif len(sim_my) == 3 and len(sim_board) == 4:
-            # both discards already done on board, we should drop ours to 2 to match rules
-            my_di = choose_discard_index(sim_my, sim_board)
-            sim_my.pop(my_di)
-            if len(sim_opp) == 3:
-                opp_di = choose_discard_index(sim_opp, sim_board)
-                sim_opp.pop(opp_di)
-
-        # If we already have 2 hole, just proceed.
-        if len(sim_my) == 3:
-            # safety
-            my_di = choose_discard_index(sim_my, sim_board)
-            sim_my.pop(my_di)
-        if len(sim_opp) == 3:
-            opp_di = choose_discard_index(sim_opp, sim_board)
-            sim_opp.pop(opp_di)
-
-        # Now deal remaining board cards to reach 6
-        while len(sim_board) < 6:
-            sim_board.append(d[idx])
-            idx += 1
-
-        # Evaluate
-        my_best = best_hand(sim_my + sim_board)
-        opp_best = best_hand(sim_opp + sim_board)
-        if my_best > opp_best:
-            wins += 1.0
-        elif my_best == opp_best:
-            wins += 0.5
-
-    return wins / float(iters)
-
-
-# ----------------------------
-# Main bot
-# ----------------------------
 class Player(Bot):
     def __init__(self):
-        # regret matching tables
-        self.regret_sum = defaultdict(lambda: [0.0] * NUM_ACTS)
-        self.strategy_sum = defaultdict(lambda: [0.0] * NUM_ACTS)
+        self.lockdown_mode = False
+        self.rng = random.Random()
+        self.eq_cache = {}
 
-        # per-round decision log for regret update
-        self.history = []  # list of dicts describing each decision
+    # ----------------------------
+    # Engine hooks
+    # ----------------------------
+    def handle_new_round(self, game_state, round_state, active):
+        # Periodically clear cache to avoid uncontrolled growth
+        if game_state.round_num % 10 == 0:
+            self.eq_cache = {}
 
-        # exploration
-        self.eps = 0.05
-        self.rng = random.Random(7)
+        # SAFETY LOCKDOWN: if we're far enough ahead, we play check/fold (but ONLY when not discarding)
+        rounds_remaining = NUM_ROUNDS - game_state.round_num + 1
+        secure_threshold = (rounds_remaining * 1.5) + 10.0
+        self.lockdown_mode = (game_state.bankroll > secure_threshold)
 
-        # cache equities for speed
-        self.eq_cache = {}  # key -> equity
+    def handle_round_over(self, game_state, terminal_state, active):
+        pass
 
-    def handle_new_round(self, game_state: GameState, round_state: RoundState, active: int):
-        self.history = []
-
-    def get_action(self, game_state: GameState, round_state: RoundState, active: int):
+    # ----------------------------
+    # Core decision
+    # ----------------------------
+    def get_action(self, game_state, round_state, active):
         legal = round_state.legal_actions()
         street = round_state.street
-        my_hole = list(round_state.hands[active])
-        board = list(round_state.board) if round_state.board is not None else []
+        my_cards = round_state.hands[active]
+        board = round_state.board
 
-        # Discard decision: just do heuristic (learning discard online is expensive)
-        if DiscardAction in legal:
-            return DiscardAction(choose_discard_index(my_hole, board))
+        # 0) DISCARD OVERRIDES EVERYTHING (THIS FIXES YOUR DISCONNECT / MISFORMAT)
+        if self.has_action(legal, DiscardAction):
+            return self.get_best_discard(my_cards, board)
 
-        # pot + cost info
+        # 1) LOCKDOWN (only applies when NOT discarding)
+        if self.lockdown_mode:
+            if self.has_action(legal, CheckAction):
+                return CheckAction()
+            if self.has_action(legal, CallAction):
+                return CallAction()
+            return FoldAction()
+
+        # 2) PRE-FLOP
+        if street == 0:
+            points = self.evaluate_preflop_points(my_cards)
+
+            if points >= 35:  # Strong
+                if self.has_action(legal, RaiseAction):
+                    # Random trap (10%)
+                    if self.rng.random() < 0.10 and self.has_action(legal, CallAction):
+                        return CallAction()
+
+                    min_r, max_r = round_state.raise_bounds()
+
+                    # Monster -> jam
+                    if points > 45:
+                        return RaiseAction(max_r)
+
+                    # Pot-sized-ish raise-to
+                    pot = self.compute_pot(round_state)
+                    opp_pip = round_state.pips[1 - active]
+                    target_raise_to = opp_pip + pot  # "raise-to"
+                    amt = max(min_r, min(max_r, target_raise_to))
+                    return RaiseAction(amt)
+
+                if self.has_action(legal, CallAction):
+                    return CallAction()
+                if self.has_action(legal, CheckAction):
+                    return CheckAction()
+                return FoldAction()
+
+            elif points >= 26:  # Playable
+                if self.has_action(legal, CallAction):
+                    return CallAction()
+                if self.has_action(legal, CheckAction):
+                    return CheckAction()
+                return FoldAction()
+
+            else:  # Trash
+                if self.has_action(legal, CheckAction):
+                    return CheckAction()
+                return FoldAction()
+
+        # 3) POST-FLOP+
+        pot = self.compute_pot(round_state)
+
         my_pip = round_state.pips[active]
         opp_pip = round_state.pips[1 - active]
-        cost = opp_pip - my_pip
-        pot = 2 * STARTING_STACK - round_state.stacks[0] - round_state.stacks[1]
+        cost_to_call = max(0, opp_pip - my_pip)
 
-        # equity estimate (cached)
-        eq_key = (street, tuple(sorted(my_hole)), tuple(board))
-        if eq_key in self.eq_cache:
-            eq = self.eq_cache[eq_key]
-        else:
-            # tune iterations: more preflop since discard is big variance
-            iters = 28 if street == 0 else 16
-            eq = rollout_equity(my_hole, board, street, iters, self.rng)
-            self.eq_cache[eq_key] = eq
+        is_wet = self.is_board_wet(board)
 
-        # build abstract state key (infoset)
-        sb = street_bucket(street)
-        strb = strength_bucket_from_equity(eq)
-        cb = cost_bucket(cost)
-        pos = 1 if active == 0 else 0  # active==0 is SB per framework convention
-        state = (sb, strb, cb, pos)
+        # Dynamic iterations (cached, so this is safe)
+        # - deeper board = more valuable accuracy
+        # - larger pot = more valuable accuracy
+        base_iters = 50
+        if pot >= 80:
+            base_iters = 70
+        if pot >= 200:
+            base_iters = 90
+        if len(board) >= 4:
+            base_iters = max(base_iters, 80)
+        if len(board) >= 5:
+            base_iters = max(base_iters, 110)
 
-        # valid actions mask
-        valid = [False] * NUM_ACTS
+        equity = self.calculate_equity(my_cards, board, street, iterations=base_iters)
 
-        # ACT_FOLD is only meaningful if we can't check for free
-        can_check = (CheckAction in legal)
-        can_call = (CallAction in legal)
-        can_raise = (RaiseAction in legal)
+        # A) VALUE / PROTECTION when strong
+        if equity > 0.60 and self.has_action(legal, RaiseAction):
+            min_r, max_r = round_state.raise_bounds()
 
-        valid[ACT_FOLD] = True
-        valid[ACT_CHECK_CALL] = True
-        valid[ACT_RAISE_POT] = can_raise
-        valid[ACT_ALL_IN] = can_raise
+            # Desired bet size (as "additional chips" to put in)
+            if is_wet:
+                bet_size = pot  # pot-ish
+            else:
+                bet_size = int(pot * 0.55)  # smaller on dry boards
 
-        # regret matching+
-        regrets = self.regret_sum[state]
-        pos_regrets = [max(regrets[i], 0.0) if valid[i] else 0.0 for i in range(NUM_ACTS)]
-        s = sum(pos_regrets)
-        if s > 1e-12:
-            probs = [pos_regrets[i] / s for i in range(NUM_ACTS)]
-        else:
-            # uniform among valid
-            k = sum(1 for v in valid if v)
-            probs = [(1.0 / k if valid[i] else 0.0) for i in range(NUM_ACTS)]
+            # Monster + wet -> jam
+            if equity > 0.80 and is_wet:
+                return RaiseAction(max_r)
 
-        # epsilon exploration
-        k = sum(1 for v in valid if v)
-        if k > 0 and self.eps > 0:
-            for i in range(NUM_ACTS):
-                if valid[i]:
-                    probs[i] = (1 - self.eps) * probs[i] + self.eps * (1.0 / k)
-                else:
-                    probs[i] = 0.0
+            # Consistent "raise-to" sizing:
+            # call_to is the amount we must match right now (highest pip)
+            call_to = max(my_pip, opp_pip)
+            raise_to = call_to + max(1, bet_size)
 
-        # accumulate average strategy
-        for i in range(NUM_ACTS):
-            self.strategy_sum[state][i] += probs[i]
+            amt = max(min_r, min(max_r, raise_to))
+            return RaiseAction(amt)
 
-        # sample action
-        r = self.rng.random()
-        cum = 0.0
-        action_idx = ACT_FOLD
-        for i, p in enumerate(probs):
-            cum += p
-            if r <= cum:
-                action_idx = i
-                break
+        # If we can't raise but we’re strong and can call/check, do it
+        if equity > 0.60:
+            if cost_to_call > 0 and self.has_action(legal, CallAction):
+                return CallAction()
+            if self.has_action(legal, CheckAction):
+                return CheckAction()
 
-        # map action to engine action + compute "raise_to" for regret estimation later
-        action_obj, raise_to = self.map_action(action_idx, round_state, active)
+        # B) POT-ODDS CALLING
+        if cost_to_call > 0:
+            # pot already includes opponent's current bet (stack deltas include pips),
+            # total after we call adds cost_to_call
+            pot_total_after_call = pot + cost_to_call
+            required_equity = cost_to_call / max(1, pot_total_after_call)
 
-        # log this decision so we can update regrets when the hand ends
-        self.history.append({
-            "state": state,
-            "probs": probs,
-            "valid": valid,
-            "street": street,
-            "pot": pot,
-            "cost": cost,
-            "my_pip": my_pip,
-            "opp_pip": opp_pip,
-            "eq": eq,
-            "action": action_idx,
-            "raise_to": raise_to,  # None if not raising
-        })
+            # "Titan margin" to avoid razor-thin spots
+            if equity >= required_equity + 0.05:
+                if self.has_action(legal, CallAction):
+                    return CallAction()
 
-        return action_obj
+        # C) FREE CHECK
+        if self.has_action(legal, CheckAction):
+            return CheckAction()
 
-    def handle_round_over(self, game_state: GameState, terminal_state: TerminalState, active: int):
+        # D) FOLD
+        return FoldAction()
+
+    # ============================================================
+    # Helper: legal action checks (robust)
+    # ============================================================
+    def has_action(self, legal_actions, action_cls):
+        # Works whether legal_actions contains classes, instances, or mixed
+        for a in legal_actions:
+            if a == action_cls:
+                return True
+            try:
+                if isinstance(a, action_cls):
+                    return True
+            except TypeError:
+                # If a isn't a type / isn't suitable for isinstance
+                pass
+        return False
+
+    # ============================================================
+    # Game logic helpers
+    # ============================================================
+    def compute_pot(self, round_state):
+        # Stack delta pot: total chips committed this hand by both players
+        return (STARTING_STACK - round_state.stacks[0]) + (STARTING_STACK - round_state.stacks[1])
+
+    def is_board_wet(self, board):
         """
-        Regret update using estimated EV per action at each logged decision.
-        This is the key improvement: regrets are updated toward higher rollout-EV actions,
-        not based on arbitrary my_delta multipliers.
+        "Wet" = draw-heavy.
+        Criteria:
+        - 3+ of same suit on board OR
+        - 3 ranks within a span of 4 (rough connectedness)
         """
-        if not self.history:
-            return
+        if len(board) < 3:
+            return False
 
-        # We *could* use terminal_state.deltas[active] as a weak baseline, but the point
-        # is to update regrets from the decision states using rollout equity + pot geometry.
-        for step in self.history:
-            state = step["state"]
-            probs = step["probs"]
-            valid = step["valid"]
-            pot = step["pot"]
-            cost = step["cost"]
-            eq = step["eq"]
-            my_pip = step["my_pip"]
-            opp_pip = step["opp_pip"]
-            played = step["action"]
-            raise_to = step["raise_to"]
+        suits = [c[1] for c in board]
+        s_counts = defaultdict(int)
+        for s in suits:
+            s_counts[s] += 1
+        if any(v >= 3 for v in s_counts.values()):
+            return True
 
-            # EV estimates for each abstract action from THIS decision point.
-            # Key approximations:
-            # - If you win at showdown with no more betting: profit = pot.
-            # - If you call and lose: loss = cost.
-            # - For raises: assume opponent continues (calls) and no further betting (crude but consistent).
-            utilities = [0.0] * NUM_ACTS
+        ranks = sorted([RANK_TO_INT[c[0]] for c in board])
+        for i in range(len(ranks) - 2):
+            if ranks[i + 2] - ranks[i] <= 4:
+                return True
 
-            # Fold/check
-            if cost <= 0:
-                utilities[ACT_FOLD] = 0.0
+        return False
+
+    def evaluate_preflop_points(self, cards):
+        ranks = sorted([RANK_TO_INT[c[0]] for c in cards], reverse=True)
+        suits = [c[1] for c in cards]
+        points = sum(ranks)
+
+        # Pairs / trips
+        if ranks[0] == ranks[1] or ranks[1] == ranks[2] or ranks[0] == ranks[2]:
+            points += 20
+            if ranks[0] == ranks[2]:
+                points += 30
+
+        # Suitedness
+        if suits[0] == suits[1] == suits[2]:
+            points += 12
+        elif suits[0] == suits[1] or suits[1] == suits[2] or suits[0] == suits[2]:
+            points += 3
+
+        # Connectivity (in rank-sorted order)
+        gap1 = ranks[0] - ranks[1]
+        gap2 = ranks[1] - ranks[2]
+        if gap1 == 1 and gap2 == 1:
+            points += 12
+        elif gap1 == 1 or gap2 == 1:
+            points += 4
+
+        return points
+
+    # ============================================================
+    # Discard logic (discarded card becomes a public board card in this variant)
+    # ============================================================
+    def get_best_discard(self, my_cards, board):
+        # MUST return DiscardAction(idx) 0..2
+        best_idx = 0
+        best_eq = -1.0
+
+        # Faster discard sim; cache will help a lot
+        iters = 60 if len(board) >= 2 else 50
+
+        for i in range(3):
+            kept = [my_cards[j] for j in range(3) if j != i]
+            board_after_discard = list(board) + [my_cards[i]]  # discarded card becomes board
+            eq = self.calculate_equity(kept, board_after_discard, street=1, iterations=iters)
+            if eq > best_eq:
+                best_eq = eq
+                best_idx = i
+
+        return DiscardAction(best_idx)
+
+    # ============================================================
+    # Equity simulation (Monte Carlo)
+    # ============================================================
+    def calculate_equity(self, my_cards, board, street, iterations=60):
+        # Cache by (hand, board, street, iters_bucket) — bucket iters so cache hit rate stays high
+        it_bucket = 40 if iterations <= 45 else 60 if iterations <= 70 else 90 if iterations <= 100 else 120
+        key = (tuple(sorted(my_cards)), tuple(board), street, it_bucket)
+
+        cached = self.eq_cache.get(key)
+        if cached is not None:
+            return cached
+
+        eq = self.calculate_equity_python(my_cards, board, iterations=it_bucket)
+        self.eq_cache[key] = eq
+        return eq
+
+    def calculate_equity_python(self, my_cards, board, iterations):
+        """
+        Sim rules approximation:
+        - Opponent is dealt 3; they keep best 2 in a board-aware way (maximize eval(keep2+board)).
+        - If our my_cards has length 3 (rare here), we also keep best 2 in the same way.
+        - Board runs out to 6 public cards total.
+        """
+        wins = 0.0
+        full_deck = [r + s for r in "23456789TJQKA" for s in "cdhs"]
+        used = set(my_cards + list(board))
+        deck = [c for c in full_deck if c not in used]
+
+        def best_two_from_three(cards3, current_board):
+            best_score = None
+            best_keep = None
+            for drop_i in range(3):
+                keep = [cards3[j] for j in range(3) if j != drop_i]
+                score = self.eval7(keep + current_board)
+                if best_score is None or score > best_score:
+                    best_score = score
+                    best_keep = keep
+            return best_keep
+
+        for _ in range(iterations):
+            self.rng.shuffle(deck)
+            d = 0
+
+            # Opponent 3 cards
+            opp3 = [deck[d], deck[d + 1], deck[d + 2]]
+            d += 3
+
+            sim_board = list(board)
+
+            # Choose our 2 (if we still have 3 in some call path)
+            if len(my_cards) == 3:
+                my2 = best_two_from_three(my_cards, sim_board)
             else:
-                utilities[ACT_FOLD] = -float(cost)
+                my2 = list(my_cards)
 
-            # Check/Call
-            if cost <= 0:
-                # check: realize equity on current pot at showdown (very approximate)
-                utilities[ACT_CHECK_CALL] = eq * pot
-            else:
-                # if call, win profit = pot, lose = cost
-                utilities[ACT_CHECK_CALL] = eq * pot - (1.0 - eq) * cost
+            # Opp chooses 2 board-aware
+            opp2 = best_two_from_three(opp3, sim_board)
 
-            # Raises
-            if raise_to is not None:
-                # how much more we invest, and how much opponent would need to call
-                raise_cost = raise_to - my_pip
-                opp_call = max(0, raise_to - opp_pip)
+            # Runout to 6 board cards
+            while len(sim_board) < 6:
+                sim_board.append(deck[d])
+                d += 1
 
-                # If raise gets called and then goes to showdown:
-                # win profit = pot + opp_call (because pot already exists; you win their extra)
-                # lose = raise_cost
-                called_ev = eq * (pot + opp_call) - (1.0 - eq) * raise_cost
+            s1 = self.eval7(my2 + sim_board)
+            s2 = self.eval7(opp2 + sim_board)
 
-                # You *could* model fold equity here if you track opponent fold-to-raise,
-                # but even without it, this is more grounded than the old code.
-                utilities[ACT_RAISE_POT] = called_ev
-                utilities[ACT_ALL_IN] = called_ev  # will differ because raise_to differs (see map_action)
-            else:
-                utilities[ACT_RAISE_POT] = utilities[ACT_CHECK_CALL]
-                utilities[ACT_ALL_IN] = utilities[ACT_CHECK_CALL]
+            if s1 > s2:
+                wins += 1.0
+            elif s1 == s2:
+                wins += 0.5
 
-            # Convert to regret update. Use expected utility under current strategy as baseline.
-            strat_ev = 0.0
-            for a in range(NUM_ACTS):
-                if valid[a]:
-                    strat_ev += probs[a] * utilities[a]
+        return wins / float(iterations)
 
-            # Regret Matching+ style: accumulate regrets (we'll clip during action selection)
-            for a in range(NUM_ACTS):
-                if valid[a]:
-                    self.regret_sum[state][a] += (utilities[a] - strat_ev)
+    # ============================================================
+    # Hand evaluation (accurate, Python)
+    # ============================================================
+    def eval7(self, cards):
+        """
+        Returns a comparable tuple representing best 5-card hand from up to 7 cards.
+        Higher tuple => stronger hand.
+        """
+        # If pkrbot exists and you know its API, wire it here safely.
+        # Right now we keep pure Python to avoid API mismatch crashes.
 
-    # ----------------------------
-    # Action mapping
-    # ----------------------------
-    def map_action(self, action_idx: int, round_state: RoundState, active: int):
-        legal = round_state.legal_actions()
-        my_pip = round_state.pips[active]
-        opp_pip = round_state.pips[1 - active]
-        pot = 2 * STARTING_STACK - round_state.stacks[0] - round_state.stacks[1]
+        # Enumerate all 5-card combos (21 combos for 7 cards; fewer if 6/5 cards)
+        best = None
+        n = len(cards)
+        if n <= 5:
+            return self.eval5(cards)
 
-        can_check = (CheckAction in legal)
-        can_call = (CallAction in legal)
-        can_raise = (RaiseAction in legal)
+        for idxs in combinations(range(n), 5):
+            hand = [cards[i] for i in idxs]
+            score = self.eval5(hand)
+            if best is None or score > best:
+                best = score
+        return best
 
-        # fold (or check if free)
-        if action_idx == ACT_FOLD:
-            if can_check:
-                return CheckAction(), None
-            return FoldAction(), None
+    def eval5(self, cards5):
+        """
+        5-card evaluator with proper kickers.
+        Categories:
+        8: straight flush
+        7: four of a kind
+        6: full house
+        5: flush
+        4: straight
+        3: three of a kind
+        2: two pair
+        1: one pair
+        0: high card
+        """
+        ranks = sorted([RANK_TO_INT[c[0]] for c in cards5], reverse=True)
+        suits = [c[1] for c in cards5]
 
-        # check/call
-        if action_idx == ACT_CHECK_CALL:
-            if can_call:
-                return CallAction(), None
-            return CheckAction(), None
+        rank_counts = Counter(ranks)
+        counts_sorted = sorted(rank_counts.items(), key=lambda x: (x[1], x[0]), reverse=True)
 
-        # raises
-        if not can_raise:
-            # fallback
-            if can_call:
-                return CallAction(), None
-            return CheckAction(), None
+        is_flush = (len(set(suits)) == 1)
 
-        min_r, max_r = round_state.raise_bounds()
+        # Straight detection (handle wheel A-5)
+        uniq = sorted(set(ranks), reverse=True)
+        is_straight = False
+        straight_high = 0
+        if len(uniq) == 5:
+            if uniq[0] - uniq[4] == 4:
+                is_straight = True
+                straight_high = uniq[0]
+            elif uniq == [14, 5, 4, 3, 2]:
+                is_straight = True
+                straight_high = 5
 
-        if action_idx == ACT_RAISE_POT:
-            # "pot raise" target: make it roughly pot-sized over current opponent contribution
-            # target total contribution to pot from us: opp_pip + pot
-            target = opp_pip + pot
-            amt = clamp(target, min_r, max_r)
-            return RaiseAction(amt), amt
+        if is_flush and is_straight:
+            return (8, straight_high)
 
-        # all-in
-        if action_idx == ACT_ALL_IN:
-            return RaiseAction(max_r), max_r
+        # Four / Full house / Trips / Pairs
+        c1_rank, c1_cnt = counts_sorted[0]
+        c2_rank, c2_cnt = counts_sorted[1] if len(counts_sorted) > 1 else (0, 0)
 
-        return CheckAction(), None
+        if c1_cnt == 4:
+            kicker = max(r for r in ranks if r != c1_rank)
+            return (7, c1_rank, kicker)
+
+        if c1_cnt == 3 and c2_cnt == 2:
+            return (6, c1_rank, c2_rank)
+
+        if is_flush:
+            # Flush breaks ties by all five ranks
+            return (5, tuple(sorted(ranks, reverse=True)))
+
+        if is_straight:
+            return (4, straight_high)
+
+        if c1_cnt == 3:
+            kickers = sorted([r for r in ranks if r != c1_rank], reverse=True)
+            return (3, c1_rank, tuple(kickers))
+
+        if c1_cnt == 2 and c2_cnt == 2:
+            high_pair = max(c1_rank, c2_rank)
+            low_pair = min(c1_rank, c2_rank)
+            kicker = max(r for r in ranks if r != high_pair and r != low_pair)
+            return (2, high_pair, low_pair, kicker)
+
+        if c1_cnt == 2:
+            pair_rank = c1_rank
+            kickers = sorted([r for r in ranks if r != pair_rank], reverse=True)
+            return (1, pair_rank, tuple(kickers))
+
+        return (0, tuple(sorted(ranks, reverse=True)))
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     run_bot(Player(), parse_args())

@@ -2,10 +2,10 @@
 # DO NOT REMOVE OR RENAME THIS FILE
 PLAYER_1_NAME = "A"
 # Change this to './player_chatbot' to interact with your own bot!
-PLAYER_1_PATH = "./rl_bot"
+PLAYER_1_PATH = "./all_in_bot"
 # NO TRAILING SLASHES ARE ALLOWED IN PATHS
 PLAYER_2_NAME = "B"
-PLAYER_2_PATH = "./math_bot"
+PLAYER_2_PATH = "./adaptive_all_in"
 # GAME PROGRESS IS RECORDED HERE
 GAME_LOG_FILENAME = "gamelog"
 # PLAYER_LOG_SIZE_LIMIT IS IN BYTES

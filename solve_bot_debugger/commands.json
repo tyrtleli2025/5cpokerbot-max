@@ -1,0 +1,7 @@
+{
+    "build": [],
+    "run": [
+        "/Users/tylerli/Documents/GitHub/5cpokerbot-max/venv/bin/python3",
+        "player.py"
+    ]
+}

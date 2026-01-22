@@ -7,7 +7,6 @@ simple evaluator and updates per-information-set regrets each decision.
 """
 import itertools
 import os
-import pickle
 import random
 import sys
 from collections import Counter
@@ -27,7 +26,6 @@ SUITS = "shdc"
 RANK_TO_INT = {r: i for i, r in enumerate(RANKS, start=2)}
 
 ALL_CARDS = [r + s for r in RANKS for s in SUITS]
-STRATEGY_PATH = os.path.join(os.path.dirname(__file__), "strategy.pkl")
 
 
 class Card:
@@ -160,7 +158,6 @@ class Player(Bot):
         self.equity_cache = {}
         self.mccfr_iterations = 4
         self.base_samples = 40
-        self.precomputed_strategy = self.load_strategy(STRATEGY_PATH)
 
     def handle_new_round(self, game_state, round_state, active):
         pass
@@ -188,13 +185,11 @@ class Player(Bot):
         equity = self.estimate_equity_cached(my_cards, board_cards, street)
         info_set = self.build_infoset(round_state, active, equity)
 
-        if self.precomputed_strategy and info_set in self.precomputed_strategy:
-            strategy = self.precomputed_strategy[info_set]
-        else:
-            for _ in range(self.mccfr_iterations):
-                utilities = self.action_utilities(round_state, active, equity, action_labels)
-                self.update_regrets(info_set, action_labels, utilities)
-            strategy = self.get_strategy(info_set, action_labels)
+        for _ in range(self.mccfr_iterations):
+            utilities = self.action_utilities(round_state, active, equity, action_labels)
+            self.update_regrets(info_set, action_labels, utilities)
+
+        strategy = self.get_strategy(info_set, action_labels)
         choice = self.sample_action(strategy)
         return self.to_action(choice, round_state, legal)
 
@@ -230,27 +225,6 @@ class Player(Bot):
         for action in actions:
             strat_sum[action] = strat_sum.get(action, 0.0) + strategy[action]
         return strategy
-
-    def average_strategy(self):
-        average = {}
-        for info_set, action_sums in self.strategy_sum.items():
-            total = sum(action_sums.values())
-            if total <= 0:
-                continue
-            average[info_set] = {action: value / total for action, value in action_sums.items()}
-        return average
-
-    def save_strategy(self, path):
-        data = self.average_strategy()
-        with open(path, "wb") as handle:
-            pickle.dump(data, handle)
-        return data
-
-    def load_strategy(self, path):
-        if os.path.exists(path):
-            with open(path, "rb") as handle:
-                return pickle.load(handle)
-        return None
 
     def update_regrets(self, info_set, actions, utilities):
         strategy = self.get_strategy(info_set, actions)

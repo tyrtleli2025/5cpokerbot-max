@@ -20,6 +20,13 @@ if SKELETON_DIR not in sys.path:
 from skeleton.actions import FoldAction, CallAction, CheckAction, RaiseAction, DiscardAction
 from skeleton.states import STARTING_STACK, BIG_BLIND, SMALL_BLIND, NUM_ROUNDS
 from skeleton.bot import Bot
+
+from jam_defense import (
+    decide_vs_postflop_jam,
+    default_config as jam_defense_config,
+    classify_hand as jam_classify_hand,
+    street_key_from_value,
+)
 from skeleton.runner import parse_args, run_bot
 
 RANKS = "23456789TJQKA"
@@ -41,6 +48,20 @@ THREEBET_FREQ_MULT = 1.25
 PREMIUM_TIER1_MAX_REQUIRED = 0.38
 PREMIUM_TIER2_MAX_REQUIRED = 0.33
 DEBUG_PF = False
+DEBUG_JAM = False
+JAM_DEFENSE_ENABLED = True
+JAM_DEFENSE_MODE = "hybrid"
+MC_SAMPLES_FLOP = 600
+MC_SAMPLES_TURN = 500
+MC_SAMPLES_RIVER = 400
+SAFETY_MARGIN_FLOP = 0.03
+SAFETY_MARGIN_TURN = 0.05
+SAFETY_MARGIN_RIVER = 0.08
+MIN_SHOWDOWNS_FOR_RANGE_UPDATE = 5
+RANGE_PRIOR_ALLOW_TOP_PAIR = True
+RANGE_PRIOR_ALLOW_DRAWS = True
+RANGE_PRIOR_ALLOW_TURN_DRAWS = True
+RANGE_PRIOR_ALLOW_RIVER_STRONG_PAIR = False
 
 
 class Card:
@@ -460,10 +481,41 @@ class Player(Bot):
         self.faced_preflop_jam = False
         self.counted_pf_opportunity = False
         self.lockdown_mode = False
+        self.counted_postflop_opps = set()
+        self.jam_opps = {"flop": 0, "turn": 0, "river": 0}
+        self.jams = {"flop": 0, "turn": 0, "river": 0}
+        self.jam_showdowns = {"flop": 0, "turn": 0, "river": 0}
+        self.jam_showdown_handclass_counts = {
+            "flop": Counter(),
+            "turn": Counter(),
+            "river": Counter(),
+        }
+        self.last_postflop_jam_street = None
+        self.jam_defense_config = jam_defense_config(evaluate_best)
+        self.jam_defense_config.update(
+            {
+                "enabled": JAM_DEFENSE_ENABLED,
+                "mode": JAM_DEFENSE_MODE,
+                "mc_samples_flop": MC_SAMPLES_FLOP,
+                "mc_samples_turn": MC_SAMPLES_TURN,
+                "mc_samples_river": MC_SAMPLES_RIVER,
+                "safety_margin_flop": SAFETY_MARGIN_FLOP,
+                "safety_margin_turn": SAFETY_MARGIN_TURN,
+                "safety_margin_river": SAFETY_MARGIN_RIVER,
+                "min_showdowns": MIN_SHOWDOWNS_FOR_RANGE_UPDATE,
+                "prior_allow_top_pair": RANGE_PRIOR_ALLOW_TOP_PAIR,
+                "prior_allow_draws": RANGE_PRIOR_ALLOW_DRAWS,
+                "prior_allow_turn_draws": RANGE_PRIOR_ALLOW_TURN_DRAWS,
+                "prior_allow_river_strong_pair": RANGE_PRIOR_ALLOW_RIVER_STRONG_PAIR,
+                "debug": DEBUG_JAM,
+            }
+        )
 
     def handle_new_round(self, game_state, round_state, active):
         self.faced_preflop_jam = False
         self.counted_pf_opportunity = False
+        self.last_postflop_jam_street = None
+        self.counted_postflop_opps = set()
         rounds_left = NUM_ROUNDS - game_state.round_num + 1
         fold_cost_per_round = (SMALL_BLIND + BIG_BLIND) / 2
         max_safe_loss = rounds_left * fold_cost_per_round
@@ -478,6 +530,13 @@ class Player(Bot):
                     self.pf_jam_showdowns += 1
                     if classify_strong_jam_hand(opp_cards):
                         self.pf_jam_strong_showdowns += 1
+            if self.last_postflop_jam_street and previous_state is not None:
+                opp_cards = previous_state.hands[1 - active]
+                if opp_cards:
+                    street_key = self.last_postflop_jam_street
+                    self.jam_showdowns[street_key] += 1
+                    hand_class = jam_classify_hand(opp_cards + previous_state.board, evaluate_best)
+                    self.jam_showdown_handclass_counts[street_key][hand_class] += 1
         except Exception:
             self.faced_preflop_jam = False
 
@@ -487,6 +546,7 @@ class Player(Bot):
             street = round_state.street
             my_cards = round_state.hands[active]
             board_cards = round_state.board
+            continue_cost = round_state.pips[1 - active] - round_state.pips[active]
 
             if DiscardAction in legal:
                 discard_idx = self.choose_discard(my_cards, board_cards)
@@ -510,7 +570,6 @@ class Player(Bot):
                 if not self.counted_pf_opportunity:
                     self.pf_jam_opportunities += 1
                     self.counted_pf_opportunity = True
-                continue_cost = round_state.pips[1 - active] - round_state.pips[active]
                 facing_jam = continue_cost > 0 and round_state.stacks[1 - active] == 0
                 facing_all_in = continue_cost > 0 and continue_cost >= round_state.stacks[active]
                 if facing_jam or facing_all_in:
@@ -524,6 +583,48 @@ class Player(Bot):
                             f"villain={self.villain_type()}",
                         )
                     return decision
+
+            if street >= 4:
+                street_key = street_key_from_value(street)
+                if street_key not in self.counted_postflop_opps:
+                    self.jam_opps[street_key] += 1
+                    self.counted_postflop_opps.add(street_key)
+                if continue_cost <= 0:
+                    pass
+                else:
+                    facing_all_in = continue_cost >= round_state.stacks[active]
+                    facing_jam = round_state.stacks[1 - active] == 0
+                    if facing_all_in or facing_jam:
+                        self.jams[street_key] += 1
+                        self.last_postflop_jam_street = street_key
+                        if self.jam_defense_config["enabled"]:
+                            pot = self.compute_pot(round_state)
+                            decision, equity, acceptance = decide_vs_postflop_jam(
+                                my_cards,
+                                board_cards,
+                                street_key,
+                                pot,
+                                continue_cost,
+                                min(round_state.stacks),
+                                {
+                                    "jam_opps": self.jam_opps,
+                                    "jams": self.jams,
+                                    "jam_showdowns": self.jam_showdowns,
+                                    "jam_showdown_handclass_counts": self.jam_showdown_handclass_counts,
+                                },
+                                self.jam_defense_config,
+                                self.rng,
+                                card_rank,
+                                card_suit,
+                            )
+                            if DEBUG_JAM or self.jam_defense_config.get("debug"):
+                                required = self.required_equity(round_state, active)
+                                print(
+                                    f"[POSTFLOP JAM] street={street_key} pot={pot} to_call={continue_cost} "
+                                    f"req={required:.2f} eq={equity:.2f} acc={acceptance:.2f} "
+                                    f"decision={'call' if decision else 'fold'}",
+                                )
+                            return CallAction() if decision else FoldAction()
 
             equity = self.estimate_equity_cached(my_cards, board_cards, street)
             info_set = self.build_infoset(round_state, active, equity)

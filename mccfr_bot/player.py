@@ -465,64 +465,75 @@ class Player(Bot):
         self.counted_pf_opportunity = False
 
     def handle_round_over(self, game_state, terminal_state, active):
-        previous_state = terminal_state.previous_state
-        if self.faced_preflop_jam and previous_state is not None:
-            opp_cards = previous_state.hands[1 - active]
-            if opp_cards:
-                self.pf_jam_showdowns += 1
-                if classify_strong_jam_hand(opp_cards):
-                    self.pf_jam_strong_showdowns += 1
+        try:
+            previous_state = terminal_state.previous_state
+            if self.faced_preflop_jam and previous_state is not None:
+                opp_cards = previous_state.hands[1 - active]
+                if opp_cards:
+                    self.pf_jam_showdowns += 1
+                    if classify_strong_jam_hand(opp_cards):
+                        self.pf_jam_strong_showdowns += 1
+        except Exception:
+            self.faced_preflop_jam = False
 
     def get_action(self, game_state, round_state, active):
-        legal = round_state.legal_actions()
-        street = round_state.street
-        my_cards = round_state.hands[active]
-        board_cards = round_state.board
+        try:
+            legal = round_state.legal_actions()
+            street = round_state.street
+            my_cards = round_state.hands[active]
+            board_cards = round_state.board
 
-        if DiscardAction in legal:
-            discard_idx = self.choose_discard(my_cards, board_cards)
-            return DiscardAction(discard_idx)
+            if DiscardAction in legal:
+                discard_idx = self.choose_discard(my_cards, board_cards)
+                return DiscardAction(discard_idx)
 
-        if street in (2, 3):
-            return CheckAction()
+            if street in (2, 3):
+                return CheckAction()
 
-        action_labels = self.available_action_labels(legal)
-        if not action_labels:
-            return CheckAction()
+            action_labels = self.available_action_labels(legal)
+            if not action_labels:
+                return CheckAction()
 
-        if street == 0:
-            if not self.counted_pf_opportunity:
-                self.pf_jam_opportunities += 1
-                self.counted_pf_opportunity = True
-            continue_cost = round_state.pips[1 - active] - round_state.pips[active]
-            facing_jam = continue_cost > 0 and round_state.stacks[1 - active] == 0
-            if facing_jam:
-                self.faced_preflop_jam = True
-                self.pf_jams += 1
-                if self.villain_type() in ("tight_pf_jammer", "likely_pf_jammer"):
-                    decision = self.decide_vs_preflop_jam(my_cards, round_state, active)
-                    if DEBUG_PF:
-                        print(
-                            f"[PF JAM] hand={my_cards} decision={decision} "
-                            f"required={self.required_equity(round_state, active):.2f} "
-                            f"villain={self.villain_type()}",
-                        )
-                    return decision
+            if street == 0:
+                if not self.counted_pf_opportunity:
+                    self.pf_jam_opportunities += 1
+                    self.counted_pf_opportunity = True
+                continue_cost = round_state.pips[1 - active] - round_state.pips[active]
+                facing_jam = continue_cost > 0 and round_state.stacks[1 - active] == 0
+                if facing_jam:
+                    self.faced_preflop_jam = True
+                    self.pf_jams += 1
+                    if self.villain_type() in ("tight_pf_jammer", "likely_pf_jammer"):
+                        decision = self.decide_vs_preflop_jam(my_cards, round_state, active)
+                        if DEBUG_PF:
+                            print(
+                                f"[PF JAM] hand={my_cards} decision={decision} "
+                                f"required={self.required_equity(round_state, active):.2f} "
+                                f"villain={self.villain_type()}",
+                            )
+                        return decision
 
-        equity = self.estimate_equity_cached(my_cards, board_cards, street)
-        info_set = self.build_infoset(round_state, active, equity)
+            equity = self.estimate_equity_cached(my_cards, board_cards, street)
+            info_set = self.build_infoset(round_state, active, equity)
 
-        if self.precomputed_strategy and info_set in self.precomputed_strategy:
-            strategy = self.precomputed_strategy[info_set]
-        else:
-            for _ in range(self.mccfr_iterations):
-                utilities = self.action_utilities(round_state, active, equity, action_labels)
-                self.update_regrets(info_set, action_labels, utilities)
-            strategy = self.get_strategy(info_set, action_labels)
-        if street == 0 and self.villain_type() in ("tight_pf_jammer", "likely_pf_jammer"):
-            strategy = self.adjust_preflop_strategy(strategy)
-        choice = self.sample_action(strategy)
-        return self.to_action(choice, round_state, legal)
+            if self.precomputed_strategy and info_set in self.precomputed_strategy:
+                strategy = self.precomputed_strategy[info_set]
+            else:
+                for _ in range(self.mccfr_iterations):
+                    utilities = self.action_utilities(round_state, active, equity, action_labels)
+                    self.update_regrets(info_set, action_labels, utilities)
+                strategy = self.get_strategy(info_set, action_labels)
+            if street == 0 and self.villain_type() in ("tight_pf_jammer", "likely_pf_jammer"):
+                strategy = self.adjust_preflop_strategy(strategy)
+            choice = self.sample_action(strategy)
+            return self.to_action(choice, round_state, legal)
+        except Exception:
+            legal = round_state.legal_actions()
+            if CheckAction in legal:
+                return CheckAction()
+            if CallAction in legal:
+                return CallAction()
+            return FoldAction()
 
     def available_action_labels(self, legal):
         labels = []

@@ -29,6 +29,19 @@ RANK_TO_INT = {r: i for i, r in enumerate(RANKS, start=2)}
 ALL_CARDS = [r + s for r in RANKS for s in SUITS]
 STRATEGY_PATH = os.path.join(os.path.dirname(__file__), "strategy.pkl")
 
+# Preflop jammer detection + response config.
+PF_JAM_RATE_THRESHOLD = 0.45
+PF_JAM_OPPORTUNITY_MIN = 20
+PF_JAM_SHOWDOWN_MIN = 5
+PF_JAM_STRONG_RATE_THRESHOLD = 0.70
+PF_LIKELY_JAM_RATE = 0.70
+PF_LIKELY_JAM_OPPORTUNITY_MIN = 10
+OPEN_FREQ_MULT = 1.20
+THREEBET_FREQ_MULT = 1.25
+PREMIUM_TIER1_MAX_REQUIRED = 0.38
+PREMIUM_TIER2_MAX_REQUIRED = 0.33
+DEBUG_PF = False
+
 
 class Card:
     def __init__(self, rank_char, suit_char):
@@ -150,6 +163,80 @@ def pick_best_keep(hand_cards, board_cards):
             best_keep = keep
             best_discard = discard
     return best_keep, best_discard
+
+
+def is_big_card(rank):
+    return rank >= 11
+
+
+def has_rank(cards, rank):
+    return any(card_rank(c) == rank for c in cards)
+
+
+def suited_pair_count(cards):
+    suits = [card_suit(c) for c in cards]
+    suit_counts = Counter(suits)
+    return max(suit_counts.values())
+
+
+def classify_strong_jam_hand(hand3):
+    ranks = sorted([card_rank(c) for c in hand3], reverse=True)
+    suits = [card_suit(c) for c in hand3]
+    suit_counts = Counter(suits)
+
+    pair_rank = None
+    for i in range(3):
+        for j in range(i + 1, 3):
+            if ranks[i] == ranks[j]:
+                pair_rank = ranks[i]
+    if pair_rank is not None and pair_rank >= 10:
+        return True
+    if pair_rank is not None and 7 <= pair_rank <= 9:
+        if any(r >= 11 for r in ranks):
+            return True
+
+    suited = suit_counts.most_common(1)[0][1] >= 2
+    if suited and has_rank(hand3, 14) and has_rank(hand3, 13):
+        return True
+    if suited and has_rank(hand3, 14) and has_rank(hand3, 12):
+        return True
+    big_cards = [r for r in ranks if r >= 12]
+    if suited and len(big_cards) >= 2:
+        return True
+    return False
+
+
+def classify_premium_tier(hand3):
+    ranks = sorted([card_rank(c) for c in hand3], reverse=True)
+    suits = [card_suit(c) for c in hand3]
+    suit_counts = Counter(suits)
+
+    pair_rank = None
+    for i in range(3):
+        for j in range(i + 1, 3):
+            if ranks[i] == ranks[j]:
+                pair_rank = ranks[i]
+
+    suited = suit_counts.most_common(1)[0][1] >= 2
+    has_ace = 14 in ranks
+    has_king = 13 in ranks
+    has_queen = 12 in ranks
+    has_jack = 11 in ranks
+
+    if pair_rank is not None and pair_rank >= 11:
+        return "tier1"
+    if suited and has_ace and has_king:
+        return "tier1"
+    if suited and has_ace and has_queen:
+        return "tier1"
+    if pair_rank == 10 and (has_ace or has_king or has_queen):
+        return "tier2"
+    if suited and sum(1 for r in ranks if r >= 11) >= 2 and max(ranks) >= 14:
+        if min(ranks) >= 8:
+            return "tier2"
+    if pair_rank == 9 and (has_ace or has_king):
+        return "tier2"
+    return None
 
 
 def card_rank(card):
@@ -366,12 +453,25 @@ class Player(Bot):
         self.mccfr_iterations = 4
         self.base_samples = 40
         self.precomputed_strategy = self.load_strategy(STRATEGY_PATH)
+        self.pf_jam_opportunities = 0
+        self.pf_jams = 0
+        self.pf_jam_showdowns = 0
+        self.pf_jam_strong_showdowns = 0
+        self.faced_preflop_jam = False
+        self.counted_pf_opportunity = False
 
     def handle_new_round(self, game_state, round_state, active):
-        pass
+        self.faced_preflop_jam = False
+        self.counted_pf_opportunity = False
 
     def handle_round_over(self, game_state, terminal_state, active):
-        pass
+        previous_state = terminal_state.previous_state
+        if self.faced_preflop_jam and previous_state is not None:
+            opp_cards = previous_state.hands[1 - active]
+            if opp_cards:
+                self.pf_jam_showdowns += 1
+                if classify_strong_jam_hand(opp_cards):
+                    self.pf_jam_strong_showdowns += 1
 
     def get_action(self, game_state, round_state, active):
         legal = round_state.legal_actions()
@@ -390,6 +490,25 @@ class Player(Bot):
         if not action_labels:
             return CheckAction()
 
+        if street == 0:
+            if not self.counted_pf_opportunity:
+                self.pf_jam_opportunities += 1
+                self.counted_pf_opportunity = True
+            continue_cost = round_state.pips[1 - active] - round_state.pips[active]
+            facing_jam = continue_cost > 0 and round_state.stacks[1 - active] == 0
+            if facing_jam:
+                self.faced_preflop_jam = True
+                self.pf_jams += 1
+                if self.villain_type() in ("tight_pf_jammer", "likely_pf_jammer"):
+                    decision = self.decide_vs_preflop_jam(my_cards, round_state, active)
+                    if DEBUG_PF:
+                        print(
+                            f"[PF JAM] hand={my_cards} decision={decision} "
+                            f"required={self.required_equity(round_state, active):.2f} "
+                            f"villain={self.villain_type()}",
+                        )
+                    return decision
+
         equity = self.estimate_equity_cached(my_cards, board_cards, street)
         info_set = self.build_infoset(round_state, active, equity)
 
@@ -400,6 +519,8 @@ class Player(Bot):
                 utilities = self.action_utilities(round_state, active, equity, action_labels)
                 self.update_regrets(info_set, action_labels, utilities)
             strategy = self.get_strategy(info_set, action_labels)
+        if street == 0 and self.villain_type() in ("tight_pf_jammer", "likely_pf_jammer"):
+            strategy = self.adjust_preflop_strategy(strategy)
         choice = self.sample_action(strategy)
         return self.to_action(choice, round_state, legal)
 
@@ -444,6 +565,55 @@ class Player(Bot):
                 continue
             average[info_set] = {action: value / total for action, value in action_sums.items()}
         return average
+
+    def villain_type(self):
+        pf_jam_rate = self.pf_jams / max(1, self.pf_jam_opportunities)
+        pf_jam_strong_rate = self.pf_jam_strong_showdowns / max(1, self.pf_jam_showdowns)
+        if (
+            self.pf_jam_opportunities >= PF_JAM_OPPORTUNITY_MIN
+            and pf_jam_rate >= PF_JAM_RATE_THRESHOLD
+            and self.pf_jam_showdowns >= PF_JAM_SHOWDOWN_MIN
+            and pf_jam_strong_rate >= PF_JAM_STRONG_RATE_THRESHOLD
+        ):
+            return "tight_pf_jammer"
+        if (
+            self.pf_jam_opportunities >= PF_LIKELY_JAM_OPPORTUNITY_MIN
+            and pf_jam_rate >= PF_LIKELY_JAM_RATE
+        ):
+            return "likely_pf_jammer"
+        return "unknown"
+
+    def required_equity(self, round_state, active):
+        to_call = round_state.pips[1 - active] - round_state.pips[active]
+        pot = self.compute_pot(round_state)
+        if to_call <= 0:
+            return 0.0
+        return to_call / (pot + to_call)
+
+    def decide_vs_preflop_jam(self, hand3, round_state, active):
+        villain_type = self.villain_type()
+        if villain_type not in ("tight_pf_jammer", "likely_pf_jammer"):
+            return self.to_action("call", round_state, round_state.legal_actions())
+        tier = classify_premium_tier(hand3)
+        if tier is None:
+            return FoldAction()
+        required = self.required_equity(round_state, active)
+        threshold = PREMIUM_TIER1_MAX_REQUIRED if tier == "tier1" else PREMIUM_TIER2_MAX_REQUIRED
+        if required <= threshold:
+            return self.to_action("call", round_state, round_state.legal_actions())
+        return FoldAction()
+
+    def adjust_preflop_strategy(self, strategy):
+        adjusted = dict(strategy)
+        if "raise" in adjusted:
+            adjusted["raise"] *= OPEN_FREQ_MULT
+        if "call" in adjusted:
+            adjusted["call"] *= THREEBET_FREQ_MULT
+        total = sum(adjusted.values())
+        if total > 0:
+            for action in adjusted:
+                adjusted[action] /= total
+        return adjusted
 
     def save_strategy(self, path):
         data = self.average_strategy()

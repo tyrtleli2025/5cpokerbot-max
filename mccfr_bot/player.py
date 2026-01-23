@@ -18,7 +18,7 @@ if SKELETON_DIR not in sys.path:
     sys.path.append(SKELETON_DIR)
 
 from skeleton.actions import FoldAction, CallAction, CheckAction, RaiseAction, DiscardAction
-from skeleton.states import STARTING_STACK, BIG_BLIND
+from skeleton.states import STARTING_STACK, BIG_BLIND, SMALL_BLIND, NUM_ROUNDS
 from skeleton.bot import Bot
 from skeleton.runner import parse_args, run_bot
 
@@ -459,10 +459,15 @@ class Player(Bot):
         self.pf_jam_strong_showdowns = 0
         self.faced_preflop_jam = False
         self.counted_pf_opportunity = False
+        self.lockdown_mode = False
 
     def handle_new_round(self, game_state, round_state, active):
         self.faced_preflop_jam = False
         self.counted_pf_opportunity = False
+        rounds_left = NUM_ROUNDS - game_state.round_num + 1
+        fold_cost_per_round = (SMALL_BLIND + BIG_BLIND) / 2
+        max_safe_loss = rounds_left * fold_cost_per_round
+        self.lockdown_mode = game_state.bankroll > max_safe_loss
 
     def handle_round_over(self, game_state, terminal_state, active):
         try:
@@ -489,6 +494,13 @@ class Player(Bot):
 
             if street in (2, 3):
                 return CheckAction()
+
+            if self.lockdown_mode:
+                if CheckAction in legal:
+                    return CheckAction()
+                if CallAction in legal:
+                    return CallAction()
+                return FoldAction()
 
             action_labels = self.available_action_labels(legal)
             if not action_labels:

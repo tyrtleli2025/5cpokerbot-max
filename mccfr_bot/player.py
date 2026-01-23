@@ -500,18 +500,18 @@ class Player(Bot):
                     self.counted_pf_opportunity = True
                 continue_cost = round_state.pips[1 - active] - round_state.pips[active]
                 facing_jam = continue_cost > 0 and round_state.stacks[1 - active] == 0
-                if facing_jam:
+                facing_all_in = continue_cost > 0 and continue_cost >= round_state.stacks[active]
+                if facing_jam or facing_all_in:
                     self.faced_preflop_jam = True
                     self.pf_jams += 1
-                    if self.villain_type() in ("tight_pf_jammer", "likely_pf_jammer"):
-                        decision = self.decide_vs_preflop_jam(my_cards, round_state, active)
-                        if DEBUG_PF:
-                            print(
-                                f"[PF JAM] hand={my_cards} decision={decision} "
-                                f"required={self.required_equity(round_state, active):.2f} "
-                                f"villain={self.villain_type()}",
-                            )
-                        return decision
+                    decision = self.decide_vs_preflop_allin(my_cards, round_state, active)
+                    if DEBUG_PF:
+                        print(
+                            f"[PF ALL-IN] hand={my_cards} decision={decision} "
+                            f"required={self.required_equity(round_state, active):.2f} "
+                            f"villain={self.villain_type()}",
+                        )
+                    return decision
 
             equity = self.estimate_equity_cached(my_cards, board_cards, street)
             info_set = self.build_infoset(round_state, active, equity)
@@ -604,13 +604,25 @@ class Player(Bot):
     def decide_vs_preflop_jam(self, hand3, round_state, active):
         villain_type = self.villain_type()
         if villain_type not in ("tight_pf_jammer", "likely_pf_jammer"):
-            return self.to_action("call", round_state, round_state.legal_actions())
+            return FoldAction()
         tier = classify_premium_tier(hand3)
         if tier is None:
             return FoldAction()
         required = self.required_equity(round_state, active)
         threshold = PREMIUM_TIER1_MAX_REQUIRED if tier == "tier1" else PREMIUM_TIER2_MAX_REQUIRED
         if required <= threshold:
+            return self.to_action("call", round_state, round_state.legal_actions())
+        return FoldAction()
+
+    def decide_vs_preflop_allin(self, hand3, round_state, active):
+        villain_type = self.villain_type()
+        if villain_type in ("tight_pf_jammer", "likely_pf_jammer"):
+            return self.decide_vs_preflop_jam(hand3, round_state, active)
+        tier = classify_premium_tier(hand3)
+        if tier != "tier1":
+            return FoldAction()
+        required = self.required_equity(round_state, active)
+        if required <= PREMIUM_TIER1_MAX_REQUIRED:
             return self.to_action("call", round_state, round_state.legal_actions())
         return FoldAction()
 

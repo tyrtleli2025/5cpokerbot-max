@@ -7,6 +7,7 @@ simple evaluator and updates per-information-set regrets each decision.
 """
 import itertools
 import os
+import pickle
 import random
 import sys
 from collections import Counter
@@ -26,6 +27,7 @@ SUITS = "shdc"
 RANK_TO_INT = {r: i for i, r in enumerate(RANKS, start=2)}
 
 ALL_CARDS = [r + s for r in RANKS for s in SUITS]
+STRATEGY_PATH = os.path.join(os.path.dirname(__file__), "strategy.pkl")
 
 
 class Card:
@@ -150,6 +152,211 @@ def pick_best_keep(hand_cards, board_cards):
     return best_keep, best_discard
 
 
+def card_rank(card):
+    return to_card(card).rank
+
+
+def card_suit(card):
+    return to_card(card).suit
+
+
+def rank_gap(card_a, card_b):
+    return abs(card_rank(card_a) - card_rank(card_b))
+
+
+def is_pair(cards):
+    return card_rank(cards[0]) == card_rank(cards[1])
+
+
+def is_suited(cards):
+    return card_suit(cards[0]) == card_suit(cards[1])
+
+
+def board_suit_count(board_cards, suit):
+    return sum(1 for c in board_cards if card_suit(c) == suit)
+
+
+def board_rank_count(board_cards, rank):
+    return sum(1 for c in board_cards if card_rank(c) == rank)
+
+
+def straight_window_count(ranks):
+    unique = sorted(set(ranks))
+    windows = 0
+    for start in range(2, 11):
+        window = set(range(start, start + 5))
+        if window.intersection(unique):
+            windows += 1
+    return windows
+
+
+def keep_strength(kept, board_cards):
+    strength = 0
+    ranks = [card_rank(c) for c in kept]
+    if is_pair(kept):
+        strength += 6
+    if is_suited(kept):
+        strength += 2
+    gap = rank_gap(kept[0], kept[1])
+    if gap == 0:
+        strength += 2
+    elif gap == 1:
+        strength += 2
+    elif gap == 2:
+        strength += 1
+    for r in ranks:
+        if r >= 11:
+            strength += 1
+    for r in ranks:
+        if board_rank_count(board_cards, r) > 0:
+            strength += 2
+    return strength
+
+
+def keep_potential(kept, board_cards):
+    potential = 0
+    ranks = [card_rank(c) for c in kept]
+    suited = is_suited(kept)
+    if suited:
+        suit = card_suit(kept[0])
+        suit_count = board_suit_count(board_cards, suit)
+        if suit_count >= 2:
+            potential += 4
+        elif suit_count == 1:
+            potential += 2
+        else:
+            potential += 1
+    gap = rank_gap(kept[0], kept[1])
+    if gap <= 4:
+        potential += 1
+    if gap == 1:
+        potential += 2
+    board_ranks = [card_rank(c) for c in board_cards]
+    combined = board_ranks + ranks
+    if straight_window_count(combined) >= 3:
+        potential += 2
+    if any(board_rank_count(board_cards, r) > 0 for r in ranks):
+        potential += 2
+    if len(board_ranks) != len(set(board_ranks)):
+        potential += 1
+    return potential
+
+
+def board_help(discarded, board_cards):
+    penalty = 0
+    disc_rank = card_rank(discarded)
+    disc_suit = card_suit(discarded)
+    suit_count = board_suit_count(board_cards, disc_suit)
+    if suit_count >= 2:
+        penalty += 6
+    elif suit_count == 1:
+        penalty += 3
+    if board_rank_count(board_cards, disc_rank) > 0:
+        penalty += 4
+    board_ranks = [card_rank(c) for c in board_cards]
+    if any(abs(disc_rank - r) == 1 for r in board_ranks):
+        penalty += 2
+    if straight_window_count(board_ranks + [disc_rank]) > straight_window_count(board_ranks):
+        penalty += 1
+    if disc_rank >= 11 and all(r <= 9 for r in board_ranks):
+        penalty += 2
+    return penalty
+
+
+def reverse_implied_risk(kept, board_cards):
+    risk = 0
+    ranks = [card_rank(c) for c in kept]
+    suited = is_suited(kept)
+    if suited:
+        suit = card_suit(kept[0])
+        if board_suit_count(board_cards, suit) >= 2 and max(ranks) <= 9:
+            risk += 2
+    gap = rank_gap(kept[0], kept[1])
+    board_ranks = [card_rank(c) for c in board_cards]
+    if gap <= 2 and max(ranks) <= 8 and any(r >= 11 for r in board_ranks):
+        risk += 2
+    if gap >= 4 and not suited:
+        risk += 1
+    return risk
+
+
+def choose_discard_index(hand3, board_cards, position):
+    board_cards = list(board_cards)
+    if len(hand3) <= 2:
+        return 0
+
+    A, B, C, D = 4, 3, 3, 2
+    scored = []
+    overrides = {}
+
+    ranks = [card_rank(c) for c in hand3]
+    suits = [card_suit(c) for c in hand3]
+    board_ranks = [card_rank(c) for c in board_cards]
+
+    # Override #1 + #5: never discard a card that matches the board.
+    matching_board = {i for i, r in enumerate(ranks) if r in board_ranks}
+    if matching_board:
+        overrides["keep_board_match"] = matching_board
+
+    # Override #2: if two cards share a suit, prefer discarding off-suit.
+    suit_counts = Counter(suits)
+    suited_suit = next((s for s, c in suit_counts.items() if c == 2), None)
+    if suited_suit:
+        off_suit_indices = [i for i, s in enumerate(suits) if s != suited_suit]
+        if off_suit_indices:
+            overrides["prefer_off_suit"] = set(off_suit_indices)
+
+    # Override #3: if pair, keep pair unless board help would be massive.
+    pair_rank = None
+    for i in range(3):
+        for j in range(i + 1, 3):
+            if ranks[i] == ranks[j]:
+                pair_rank = ranks[i]
+    if pair_rank is not None:
+        overrides["keep_pair"] = {i for i, r in enumerate(ranks) if r == pair_rank}
+
+    # Override #4: avoid creating 3-flush on board.
+    flush_sensitive = {i for i, s in enumerate(suits) if board_suit_count(board_cards, s) >= 2}
+    if flush_sensitive:
+        overrides["avoid_third_flush"] = flush_sensitive
+
+    for idx in range(3):
+        kept = [hand3[i] for i in range(3) if i != idx]
+        discarded = hand3[idx]
+        score = 0
+        score += A * keep_strength(kept, board_cards)
+        score += B * keep_potential(kept, board_cards)
+        score -= C * board_help(discarded, board_cards)
+        score -= D * reverse_implied_risk(kept, board_cards)
+        if position == "sb":
+            score -= board_help(discarded, board_cards) * 0.5
+        scored.append(score)
+
+    # Apply overrides by making disallowed discards very unattractive.
+    for idx in range(3):
+        if "keep_board_match" in overrides and idx in overrides["keep_board_match"]:
+            scored[idx] -= 50
+        if "avoid_third_flush" in overrides and idx in overrides["avoid_third_flush"]:
+            scored[idx] -= 20
+        if "keep_pair" in overrides and idx in overrides["keep_pair"]:
+            scored[idx] -= 15
+        if "prefer_off_suit" in overrides and idx not in overrides["prefer_off_suit"]:
+            scored[idx] -= 5
+
+    # Tiebreakers: discard least synergistic, then lowest rank.
+    best = max(scored)
+    candidates = [i for i, s in enumerate(scored) if s == best]
+    if len(candidates) > 1:
+        def synergy(idx):
+            kept = [hand3[i] for i in range(3) if i != idx]
+            suited = 1 if is_suited(kept) else 0
+            gap = rank_gap(kept[0], kept[1])
+            return suited * 2 - gap
+
+        candidates.sort(key=lambda i: (synergy(i), -min(ranks[i], 14)))
+    return candidates[0]
+
+
 class Player(Bot):
     def __init__(self):
         self.rng = random.Random(7)
@@ -158,6 +365,7 @@ class Player(Bot):
         self.equity_cache = {}
         self.mccfr_iterations = 4
         self.base_samples = 40
+        self.precomputed_strategy = self.load_strategy(STRATEGY_PATH)
 
     def handle_new_round(self, game_state, round_state, active):
         pass
@@ -185,11 +393,13 @@ class Player(Bot):
         equity = self.estimate_equity_cached(my_cards, board_cards, street)
         info_set = self.build_infoset(round_state, active, equity)
 
-        for _ in range(self.mccfr_iterations):
-            utilities = self.action_utilities(round_state, active, equity, action_labels)
-            self.update_regrets(info_set, action_labels, utilities)
-
-        strategy = self.get_strategy(info_set, action_labels)
+        if self.precomputed_strategy and info_set in self.precomputed_strategy:
+            strategy = self.precomputed_strategy[info_set]
+        else:
+            for _ in range(self.mccfr_iterations):
+                utilities = self.action_utilities(round_state, active, equity, action_labels)
+                self.update_regrets(info_set, action_labels, utilities)
+            strategy = self.get_strategy(info_set, action_labels)
         choice = self.sample_action(strategy)
         return self.to_action(choice, round_state, legal)
 
@@ -225,6 +435,27 @@ class Player(Bot):
         for action in actions:
             strat_sum[action] = strat_sum.get(action, 0.0) + strategy[action]
         return strategy
+
+    def average_strategy(self):
+        average = {}
+        for info_set, action_sums in self.strategy_sum.items():
+            total = sum(action_sums.values())
+            if total <= 0:
+                continue
+            average[info_set] = {action: value / total for action, value in action_sums.items()}
+        return average
+
+    def save_strategy(self, path):
+        data = self.average_strategy()
+        with open(path, "wb") as handle:
+            pickle.dump(data, handle)
+        return data
+
+    def load_strategy(self, path):
+        if os.path.exists(path):
+            with open(path, "rb") as handle:
+                return pickle.load(handle)
+        return None
 
     def update_regrets(self, info_set, actions, utilities):
         strategy = self.get_strategy(info_set, actions)
@@ -300,19 +531,10 @@ class Player(Bot):
         return FoldAction()
 
     def choose_discard(self, my_cards, board_cards):
-        if len(my_cards) <= 2:
-            return 0
-        best_idx = 0
-        best_score = None
-        for idx in range(len(my_cards)):
-            keep = [c for i, c in enumerate(my_cards) if i != idx]
-            discard = my_cards[idx]
-            eval_cards = [to_card(c) for c in keep] + [to_card(c) for c in board_cards] + [to_card(discard)]
-            score = evaluate_best(eval_cards)
-            if best_score is None or score > best_score:
-                best_score = score
-                best_idx = idx
-        return best_idx
+        return choose_discard_index(my_cards, board_cards, self.position_from_street(board_cards))
+
+    def position_from_street(self, board_cards):
+        return "sb" if len(board_cards) >= 3 else "bb"
 
     def estimate_equity_cached(self, my_cards, board_cards, street):
         key = (tuple(sorted(map(card_str, my_cards))), tuple(sorted(map(card_str, board_cards))), street, len(my_cards))

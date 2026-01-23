@@ -1,19 +1,14 @@
 import random
 import unittest
 
-from player import (
-    decide_vs_postflop_jam,
-    jam_defense_config,
-    evaluate_best,
-    card_rank,
-    card_suit,
-)
+from jam_defense import decide_vs_postflop_jam, default_config
+from player import evaluate_best, card_rank, card_suit
 
 
 class PostflopJamTests(unittest.TestCase):
     def setUp(self):
         self.rng = random.Random(42)
-        self.config = jam_defense_config(evaluate_best)
+        self.config = default_config(evaluate_best)
         self.config["mode"] = "rules"
 
     def test_river_weak_pair_folds(self):
@@ -89,7 +84,7 @@ class PostflopJamTests(unittest.TestCase):
         self.assertFalse(call)
 
     def test_mc_determinism(self):
-        config = jam_defense_config(evaluate_best)
+        config = default_config(evaluate_best)
         config["mode"] = "mc"
         rng = random.Random(7)
         hole = ["Ah", "Kh"]

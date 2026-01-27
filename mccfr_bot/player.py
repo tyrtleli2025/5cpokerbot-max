@@ -10,6 +10,7 @@ import os
 import pickle
 import random
 import sys
+import hashlib
 from collections import Counter
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -41,6 +42,21 @@ THREEBET_FREQ_MULT = 1.25
 PREMIUM_TIER1_MAX_REQUIRED = 0.38
 PREMIUM_TIER2_MAX_REQUIRED = 0.33
 DEBUG_PF = False
+DISCARD_SIM_SAMPLES = 350
+POSTFLOP_DEFENSE_SAMPLES = 250
+PREFLOP_EQUITY_SAMPLES = 300
+SMALL_BET_MAX = 4
+SMALL_BET_POT_FRACTION = 1 / 3
+SMALL_BET_MIN_EQUITY = 0.28
+TURN_MARGIN = 0.03
+RIVER_MARGIN = 0.05
+FLOP_MARGIN = 0.015
+BARREL_RATE_THRESHOLD = 0.55
+RIVER_VALUE_HEAVY_THRESHOLD = 0.20
+PREFLOP_RAISE_TIGHTEN_1 = 120
+PREFLOP_RAISE_TIGHTEN_2 = 180
+PREFLOP_EQUITY_TIGHTEN_1 = 0.55
+PREFLOP_EQUITY_TIGHTEN_2 = 0.60
 
 
 class Card:
@@ -163,6 +179,12 @@ def pick_best_keep(hand_cards, board_cards):
             best_keep = keep
             best_discard = discard
     return best_keep, best_discard
+
+
+def deterministic_seed(*parts):
+    seed_input = "|".join(str(part) for part in parts)
+    digest = hashlib.sha256(seed_input.encode("utf-8")).hexdigest()
+    return int(digest[:16], 16)
 
 
 def is_big_card(rank):
@@ -450,6 +472,8 @@ class Player(Bot):
         self.regrets = {}
         self.strategy_sum = {}
         self.equity_cache = {}
+        self.preflop_equity_cache = {}
+        self.discard_cache = {}
         self.mccfr_iterations = 4
         self.base_samples = 40
         self.precomputed_strategy = self.load_strategy(STRATEGY_PATH)
@@ -459,10 +483,18 @@ class Player(Bot):
         self.pf_jam_strong_showdowns = 0
         self.faced_preflop_jam = False
         self.counted_pf_opportunity = False
+        self.small_bet_opportunities = 0
+        self.small_bet_barrels = 0
+        self.last_small_bet_street = None
+        self.opponent_river_bet = False
+        self.opponent_river_bet_showdowns = 0
+        self.opponent_river_bluff_showdowns = 0
 
     def handle_new_round(self, game_state, round_state, active):
         self.faced_preflop_jam = False
         self.counted_pf_opportunity = False
+        self.last_small_bet_street = None
+        self.opponent_river_bet = False
 
     def handle_round_over(self, game_state, terminal_state, active):
         try:
@@ -473,6 +505,14 @@ class Player(Bot):
                     self.pf_jam_showdowns += 1
                     if classify_strong_jam_hand(opp_cards):
                         self.pf_jam_strong_showdowns += 1
+            if self.opponent_river_bet and previous_state is not None:
+                opp_cards = previous_state.hands[1 - active]
+                board_cards = previous_state.board
+                if opp_cards:
+                    self.opponent_river_bet_showdowns += 1
+                    opp_category = self.evaluate_showdown_category(opp_cards, board_cards)
+                    if opp_category == 0:
+                        self.opponent_river_bluff_showdowns += 1
         except Exception:
             self.faced_preflop_jam = False
 
@@ -482,9 +522,11 @@ class Player(Bot):
             street = round_state.street
             my_cards = round_state.hands[active]
             board_cards = round_state.board
+            self.track_opponent_tendencies(round_state, active)
+            continue_cost = round_state.pips[1 - active] - round_state.pips[active]
 
             if DiscardAction in legal:
-                discard_idx = self.choose_discard(my_cards, board_cards)
+                discard_idx = self.choose_discard(my_cards, board_cards, street)
                 return DiscardAction(discard_idx)
 
             if street in (2, 3):
@@ -498,7 +540,6 @@ class Player(Bot):
                 if not self.counted_pf_opportunity:
                     self.pf_jam_opportunities += 1
                     self.counted_pf_opportunity = True
-                continue_cost = round_state.pips[1 - active] - round_state.pips[active]
                 facing_jam = continue_cost > 0 and round_state.stacks[1 - active] == 0
                 facing_all_in = continue_cost > 0 and continue_cost >= round_state.stacks[active]
                 if facing_jam or facing_all_in:
@@ -512,8 +553,14 @@ class Player(Bot):
                             f"villain={self.villain_type()}",
                         )
                     return decision
+                if continue_cost > 0 and self.preflop_should_fold_large_raise(my_cards, round_state, active):
+                    return FoldAction()
 
             equity = self.estimate_equity_cached(my_cards, board_cards, street)
+            if continue_cost > 0 and street >= 4 and CallAction in legal:
+                if self.should_call_postflop(my_cards, board_cards, round_state, active):
+                    return CallAction()
+                return FoldAction()
             info_set = self.build_infoset(round_state, active, equity)
 
             if self.precomputed_strategy and info_set in self.precomputed_strategy:
@@ -526,7 +573,7 @@ class Player(Bot):
             if street == 0 and self.villain_type() in ("tight_pf_jammer", "likely_pf_jammer"):
                 strategy = self.adjust_preflop_strategy(strategy)
             choice = self.sample_action(strategy)
-            return self.to_action(choice, round_state, legal)
+            return self.to_action(choice, round_state, legal, equity=equity)
         except Exception:
             legal = round_state.legal_actions()
             if CheckAction in legal:
@@ -626,6 +673,18 @@ class Player(Bot):
             return self.to_action("call", round_state, round_state.legal_actions())
         return FoldAction()
 
+    def preflop_should_fold_large_raise(self, hand3, round_state, active):
+        continue_cost = round_state.pips[1 - active] - round_state.pips[active]
+        if continue_cost <= 0:
+            return False
+        opp_pip = round_state.pips[1 - active]
+        if opp_pip < PREFLOP_RAISE_TIGHTEN_1:
+            return False
+        equity = self.estimate_preflop_equity(hand3)
+        if opp_pip >= PREFLOP_RAISE_TIGHTEN_2:
+            return equity < PREFLOP_EQUITY_TIGHTEN_2
+        return equity < PREFLOP_EQUITY_TIGHTEN_1
+
     def adjust_preflop_strategy(self, strategy):
         adjusted = dict(strategy)
         if "raise" in adjusted:
@@ -683,7 +742,7 @@ class Player(Bot):
                 continue
 
             if action == "raise":
-                raise_to = self.choose_raise_amount(round_state, active)
+                raise_to = self.choose_raise_amount(round_state, active, equity)
                 my_cost = raise_to - round_state.pips[active]
                 opp_cost = raise_to - round_state.pips[1 - active]
                 my_final = my_contrib + my_cost
@@ -697,19 +756,27 @@ class Player(Bot):
     def raise_fold_probability(self, equity):
         return max(0.1, min(0.7, 0.2 + (equity - 0.5) * 0.8))
 
-    def choose_raise_amount(self, round_state, active):
+    def choose_raise_amount(self, round_state, active, equity=None):
         min_raise, max_raise = round_state.raise_bounds()
         pot = self.compute_pot(round_state)
         opp_pip = round_state.pips[1 - active]
         target = opp_pip + max(BIG_BLIND * 2, pot)
-        return max(min_raise, min(max_raise, target))
+        raise_to = max(min_raise, min(max_raise, target))
+        if round_state.street == 0:
+            if equity is None:
+                equity = self.estimate_equity_cached(round_state.hands[active], [], 0)
+            if raise_to >= PREFLOP_RAISE_TIGHTEN_2 and equity < PREFLOP_EQUITY_TIGHTEN_2:
+                raise_to = min(raise_to, PREFLOP_RAISE_TIGHTEN_2)
+            elif raise_to >= PREFLOP_RAISE_TIGHTEN_1 and equity < PREFLOP_EQUITY_TIGHTEN_1:
+                raise_to = min(raise_to, PREFLOP_RAISE_TIGHTEN_1)
+        return max(min_raise, min(max_raise, raise_to))
 
     def compute_pot(self, round_state):
         return (STARTING_STACK * 2) - sum(round_state.stacks)
 
-    def to_action(self, label, round_state, legal):
+    def to_action(self, label, round_state, legal, equity=None):
         if label == "raise" and RaiseAction in legal:
-            return RaiseAction(self.choose_raise_amount(round_state, round_state.button % 2))
+            return RaiseAction(self.choose_raise_amount(round_state, round_state.button % 2, equity))
         if label == "call":
             if CallAction in legal:
                 return CallAction()
@@ -723,8 +790,17 @@ class Player(Bot):
             return CheckAction()
         return FoldAction()
 
-    def choose_discard(self, my_cards, board_cards):
-        return choose_discard_index(my_cards, board_cards, self.position_from_street(board_cards))
+    def choose_discard(self, my_cards, board_cards, street):
+        key = (
+            tuple(sorted(map(card_str, my_cards))),
+            tuple(sorted(map(card_str, board_cards))),
+            street,
+        )
+        if key in self.discard_cache:
+            return self.discard_cache[key]
+        discard_idx = self.choose_discard_equity(my_cards, board_cards, street)
+        self.discard_cache[key] = discard_idx
+        return discard_idx
 
     def position_from_street(self, board_cards):
         return "sb" if len(board_cards) >= 3 else "bb"
@@ -733,11 +809,13 @@ class Player(Bot):
         key = (tuple(sorted(map(card_str, my_cards))), tuple(sorted(map(card_str, board_cards))), street, len(my_cards))
         if key in self.equity_cache:
             return self.equity_cache[key]
-        equity = self.estimate_equity(my_cards, board_cards, street, self.base_samples)
+        seed = deterministic_seed("equity", key)
+        equity = self.estimate_equity(my_cards, board_cards, street, self.base_samples, seed)
         self.equity_cache[key] = equity
         return equity
 
-    def estimate_equity(self, my_cards, board_cards, street, samples):
+    def estimate_equity(self, my_cards, board_cards, street, samples, seed=None):
+        rng = random.Random(seed) if seed is not None else self.rng
         known_cards = {card_str(c) for c in my_cards} | {card_str(c) for c in board_cards}
         deck = [c for c in ALL_CARDS if c not in known_cards]
 
@@ -747,7 +825,7 @@ class Player(Bot):
         wins = 0
         ties = 0
         for _ in range(samples):
-            draw = self.rng.sample(deck, 3 + remaining_community)
+            draw = rng.sample(deck, 3 + remaining_community)
             opp_cards = draw[:3]
             community = draw[3:]
             full_board = list(board_cards) + community
@@ -779,6 +857,103 @@ class Player(Bot):
                 ties += 1
 
         return (wins + 0.5 * ties) / samples if samples > 0 else 0.0
+
+    def estimate_preflop_equity(self, hand3):
+        key = tuple(sorted(map(card_str, hand3)))
+        if key in self.preflop_equity_cache:
+            return self.preflop_equity_cache[key]
+        seed = deterministic_seed("preflop", key)
+        equity = self.estimate_equity(hand3, [], 0, PREFLOP_EQUITY_SAMPLES, seed)
+        self.preflop_equity_cache[key] = equity
+        return equity
+
+    def choose_discard_equity(self, hand3, board_cards, street):
+        position = self.position_from_street(board_cards)
+        discard_options = []
+        for idx in range(3):
+            kept = [hand3[i] for i in range(3) if i != idx]
+            discarded = hand3[idx]
+            board_with_discard = list(board_cards) + [discarded]
+            seed = deterministic_seed("discard", idx, street, sorted(map(card_str, hand3)), sorted(map(card_str, board_cards)))
+            equity = self.estimate_equity(kept, board_with_discard, street, DISCARD_SIM_SAMPLES, seed)
+            # Keep a slight bias toward made-hand integrity to avoid dumping clear value without sim support.
+            strength_bonus = 0.0
+            if is_pair(kept):
+                strength_bonus += 0.02
+            if is_suited(kept) and board_suit_count(board_cards, card_suit(kept[0])) >= 2:
+                strength_bonus += 0.01
+            if position == "sb":
+                strength_bonus += 0.005
+            discard_options.append((equity + strength_bonus, idx))
+        discard_options.sort(reverse=True)
+        return discard_options[0][1]
+
+    def should_call_postflop(self, my_cards, board_cards, round_state, active):
+        continue_cost = round_state.pips[1 - active] - round_state.pips[active]
+        if continue_cost <= 0:
+            return True
+        pot = self.compute_pot(round_state)
+        pot_odds = continue_cost / (pot + continue_cost)
+        seed = deterministic_seed("defense", tuple(sorted(map(card_str, my_cards))), tuple(sorted(map(card_str, board_cards))), round_state.street)
+        equity = self.estimate_equity(my_cards, board_cards, round_state.street, POSTFLOP_DEFENSE_SAMPLES, seed)
+        margin = self.defense_margin(round_state.street)
+        bet_size = continue_cost
+        small_bet_threshold = max(SMALL_BET_MAX, pot * SMALL_BET_POT_FRACTION)
+        # Minimum defense floor vs tiny bets to avoid auto-profitable bluffs.
+        if bet_size <= small_bet_threshold and equity >= SMALL_BET_MIN_EQUITY:
+            return True
+        return equity >= pot_odds + margin
+
+    def defense_margin(self, street):
+        if street >= 5:
+            margin = RIVER_MARGIN
+        elif street == 4:
+            margin = TURN_MARGIN
+        else:
+            margin = FLOP_MARGIN
+        barrel_rate = self.small_bet_barrels / max(1, self.small_bet_opportunities)
+        if street >= 5 and barrel_rate >= BARREL_RATE_THRESHOLD:
+            margin = max(0.0, margin - 0.02)
+        bluff_rate = self.opponent_river_bluff_showdowns / max(1, self.opponent_river_bet_showdowns)
+        if street >= 5 and bluff_rate <= RIVER_VALUE_HEAVY_THRESHOLD:
+            margin += 0.02
+        return margin
+
+    def track_opponent_tendencies(self, round_state, active):
+        previous_state = round_state.previous_state
+        if previous_state is None:
+            return
+        if round_state.button % 2 != active:
+            return
+        continue_cost = round_state.pips[1 - active] - round_state.pips[active]
+        if continue_cost <= 0:
+            return
+        pot = self.compute_pot(round_state)
+        bet_size = continue_cost
+        is_small_bet = bet_size <= max(SMALL_BET_MAX, pot * SMALL_BET_POT_FRACTION)
+        if round_state.street >= 4 and is_small_bet:
+            self.small_bet_opportunities += 1
+            self.last_small_bet_street = round_state.street
+        if (
+            self.last_small_bet_street is not None
+            and round_state.street > self.last_small_bet_street
+            and round_state.street >= 5
+        ):
+            self.small_bet_barrels += 1
+            self.last_small_bet_street = None
+        if round_state.street >= 5:
+            self.opponent_river_bet = True
+
+    def evaluate_showdown_category(self, hand_cards, board_cards):
+        hand_cards = list(hand_cards)
+        board_cards = list(board_cards)
+        if len(hand_cards) == 3:
+            keep, discard = pick_best_keep(hand_cards, board_cards)
+            board_cards = board_cards + [discard]
+            hand_cards = keep
+        eval_cards = [to_card(c) for c in hand_cards] + [to_card(c) for c in board_cards]
+        score = evaluate_best(eval_cards)
+        return score[0]
 
 
 if __name__ == "__main__":
